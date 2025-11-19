@@ -29,7 +29,7 @@ impl UCI {
             }
 
             let cmd: String = buffer.clone();
-            let mut args: std::str::SplitWhitespace<'_> = cmd.trim().split_whitespace();
+            let mut args: std::str::SplitWhitespace<'_> = cmd.split_whitespace();
             let mut token = args.next().unwrap_or("");
             buffer.clear();
 
@@ -55,7 +55,7 @@ impl UCI {
                 UCI::bench(search);
             } else if token == "help" {
                 UCI::help();
-            } else if token != "" && token.chars().nth(0).unwrap_or_default() != '#' {
+            } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
                 println!("Unknown command: {}. Type help for more information", token);
             }
 
@@ -76,7 +76,7 @@ impl UCI {
         } else if token == "fen" {
             let mut fen = String::new();
 
-            while token != "moves" && token != "" {
+            while token != "moves" && !token.is_empty() {
                 token = args.next().unwrap_or("");
                 fen += token;
                 fen += " ";
@@ -88,7 +88,7 @@ impl UCI {
         // Move to first move if any
         token = args.next().unwrap_or("");
 
-        while token != "" {
+        while !token.is_empty() {
             let mv_string = token.to_ascii_lowercase();
 
             for mv in search.movegen.legal_moves(&search.position) {
@@ -106,7 +106,7 @@ impl UCI {
         let mut limits = SearchLimits::default();
         let mut token = args.next().unwrap_or("");
 
-        while token != "" {
+        while !token.is_empty() {
             match token {
                 "perft" => {
                     limits.perft = args.next().unwrap_or("1").parse::<u8>().unwrap_or(1);
@@ -157,7 +157,7 @@ impl UCI {
         let mut token = args.next().unwrap_or("");
         let mut selected_option = "";
 
-        while token != "" {
+        while !token.is_empty() {
             match token {
                 "name" => {
                     selected_option = args.next().unwrap_or("");
@@ -165,12 +165,9 @@ impl UCI {
                 "value" => {
                     let value = args.next().unwrap_or("");
 
-                    match selected_option {
-                        "Hash" => search.eval.resize_transposition_table(
-                            value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).min(512).max(1),
-                        ),
-                        _ => (),
-                    }
+                    if selected_option == "Hash" { search.eval.resize_transposition_table(
+                        value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).min(512).max(1),
+                    ) }
                 }
                 _ => (),
             }
@@ -201,10 +198,10 @@ impl UCI {
     }
 
     fn help() {
-        println!("");
+        println!();
         println!("Oxide is a simple chess engine I built as a learning project.");
         println!("It is UCI compatible and can be used with any UCI compatible GUI.");
         println!("While not very strong yet but I am working on it and hoping to achieve a rating of 2000+.");
-        println!("");
+        println!();
     }
 }

@@ -1,7 +1,7 @@
 use crate::defs::{Bitboard, Square};
 
 pub fn lsb(bitboard: Bitboard) -> Square {
-    return bitboard.trailing_zeros() as Square;
+    bitboard.trailing_zeros() as Square
 }
 
 pub fn pop(bitboard: &mut Bitboard) -> Square {
@@ -9,5 +9,5 @@ pub fn pop(bitboard: &mut Bitboard) -> Square {
 
     *bitboard ^= 1u64 << square;
 
-    return square;
+    square
 }

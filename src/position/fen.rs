@@ -10,7 +10,7 @@ impl Position {
 
         let mut square: usize = 0;
         for c in fen_parts[0].split('/').rev().collect::<Vec<&str>>().join("").chars() {
-            if c.is_digit(10) {
+            if c.is_ascii_digit() {
                 square += c.to_digit(10).unwrap() as usize;
             } else {
                 let piece_type: Piece = match c.to_ascii_lowercase() {
@@ -52,12 +52,10 @@ impl Position {
         if fen_parts[3] != "-" {
             let file = "abcdefgh"
                 .chars()
-                .into_iter()
                 .position(|c| c == fen_parts[3].chars().nth(0).unwrap())
                 .unwrap();
             let rank = "12345678"
                 .chars()
-                .into_iter()
                 .position(|c| c == fen_parts[3].chars().nth(1).unwrap())
                 .unwrap();
 
@@ -159,6 +157,6 @@ impl Position {
             fen += &pretty_square(self.states.last().unwrap().en_passant_square);
         }
 
-        return fen;
+        fen
     }
 }

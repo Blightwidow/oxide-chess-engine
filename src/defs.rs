@@ -8,7 +8,7 @@ pub type Square = usize;
 pub const NONE_SQUARE: Square = 64;
 
 pub fn is_ok(sq: Square) -> bool {
-    return sq < 64;
+    sq < 64
 }
 
 pub struct Sides;
@@ -30,15 +30,15 @@ impl PieceType {
 }
 
 pub fn make_piece(side: Side, piece_type: Piece) -> Piece {
-    return side * 8 + piece_type;
+    side * 8 + piece_type
 }
 
 pub fn color_of_piece(piece: Piece) -> Side {
-    return piece / 8;
+    piece / 8
 }
 
 pub fn type_of_piece(piece: Piece) -> Side {
-    return piece % 8;
+    piece % 8
 }
 
 pub struct NrOf;
@@ -70,50 +70,50 @@ impl Directions {
 }
 
 pub fn file_of(square: Square) -> usize {
-    return square % 8;
+    square % 8
 }
 
 pub fn rank_of(square: Square) -> usize {
-    return square / 8;
+    square / 8
 }
 
 pub fn square_of(file: usize, rank: usize) -> Square {
-    return file + rank * 8;
+    file + rank * 8
 }
 
 pub fn distance(from: Square, to: Square) -> usize {
     let rank_dist = rank_of(from) as isize - rank_of(to) as isize;
     let file_dist = file_of(from) as isize - file_of(to) as isize;
 
-    return (rank_dist.abs().max(file_dist.abs())) as usize;
+    (rank_dist.abs().max(file_dist.abs())) as usize
 }
 
 #[allow(dead_code)]
 pub fn pretty_square(square: Square) -> String {
-    return format!(
+    format!(
         "{}{}",
         "abcdefgh".chars().nth(file_of(square)).unwrap(),
         rank_of(square) + 1
-    );
+    )
 }
 
 #[allow(dead_code)]
 pub fn pretty_piece(piece: Piece) -> String {
-    return format!(
+    format!(
         "{}{}",
         "xpnbrqk".chars().nth(type_of_piece(piece)).unwrap(),
         "WB".chars().nth(color_of_piece(piece)).unwrap(),
-    );
+    )
 }
 
 pub fn shift(bitboard: Bitboard, direction: Direction) -> Bitboard {
     if direction > 0 {
-        return bitboard << direction;
+        bitboard << direction
     } else {
-        return bitboard >> -direction;
+        bitboard >> -direction
     }
 }
 
 pub fn square_bb(square: Square) -> Bitboard {
-    return 1u64 << square;
+    1u64 << square
 }

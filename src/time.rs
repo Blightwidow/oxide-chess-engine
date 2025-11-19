@@ -16,10 +16,10 @@ impl TimeManager {
         let start_time = time::Instant::now();
         let cutoff = start_time + time::Duration::from_millis(think_time);
 
-        return Self {
-            start_time: start_time,
+        Self {
+            start_time,
             cutoff: Some(cutoff),
-        };
+        }
     }
 
     pub fn default() -> Self {
@@ -34,6 +34,6 @@ impl TimeManager {
             return time::Instant::now() >= cutoff;
         }
 
-        return false;
+        false
     }
 }

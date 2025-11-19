@@ -35,11 +35,11 @@ impl SearchLimits {
     }
 
     pub fn time(&self, side: Side) -> u64 {
-        return match side {
+        match side {
             Sides::WHITE => self.white_time,
             Sides::BLACK => self.black_time,
             _ => panic!("Invalid side"),
-        };
+        }
     }
 }
 

@@ -32,7 +32,7 @@ impl Movegen {
                 || position.legal(mv)
         });
 
-        return movelist;
+        movelist
     }
 
     fn generate(&self, position: &Position, us: Side) -> Vec<Move> {
@@ -54,11 +54,11 @@ impl Movegen {
 
         self.generate_piece(position, &mut movelist, PieceType::KING, us, FULL);
 
-        if checkers.len() == 0 {
+        if checkers.is_empty() {
             self.generate_castling(position, &mut movelist, us);
         }
 
-        return movelist;
+        movelist
     }
 
     fn generate_pawns(&self, position: &Position, movelist: &mut Vec<Move>, us: Side, target_bb: Bitboard) {
@@ -87,7 +87,7 @@ impl Movegen {
         // We generate double pawn pushes from the first push to take blockers on the 3rd rank into account
         let mut double_bb: Bitboard = shift(single_bb & rank_3bb, up) & empty_squares & target_bb;
         // Then we filter with the target squares
-        single_bb = single_bb & target_bb;
+        single_bb &= target_bb;
 
         while single_bb != EMPTY {
             let to: Square = bits::pop(&mut single_bb);

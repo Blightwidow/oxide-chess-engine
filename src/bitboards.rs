@@ -73,11 +73,11 @@ impl Bitboards {
             }
         }
 
-        return mg;
+        mg
     }
 
     pub fn attack_bb(&self, piece: Piece, square: Square, occupied: Bitboard) -> Bitboard {
-        return match type_of_piece(piece) {
+        match type_of_piece(piece) {
             PieceType::PAWN => self.pawn_attacks[color_of_piece(piece)][square],
             PieceType::KING => self.king[square],
             PieceType::KNIGHT => self.knight[square],
@@ -88,7 +88,7 @@ impl Bitboards {
                     | self.rook[self.rook_magics[square].get_index(occupied)]
             }
             piece => panic!("Invalid piece {}.", piece),
-        };
+        }
     }
 
     pub fn sliding_attack(piece: Piece, square: Square, occupied: Bitboard) -> Bitboard {
@@ -128,7 +128,7 @@ impl Bitboards {
             }
         }
 
-        return attack_bb;
+        attack_bb
     }
 
     // Returns the bitboard of target square for the given step
@@ -136,10 +136,10 @@ impl Bitboards {
     fn safe_destination(square: Square, step: Direction) -> Bitboard {
         let to = square as isize + step;
 
-        return match to {
-            to if to < 0 || to > 63 || distance(square, to as usize) > 2 => EMPTY,
+        match to {
+            to if !(0..=63).contains(&to) || distance(square, to as usize) > 2 => EMPTY,
             _ => 1u64 << to,
-        };
+        }
     }
 
     pub fn init_magics(piece_type: Piece, magics: &mut [Magic; NrOf::SQUARES], table: &mut Vec<Bitboard>) {
@@ -158,13 +158,13 @@ impl Bitboards {
             let mut occupancy: [Bitboard; 4096] = [EMPTY; 4096];
             let mut reference: [Bitboard; 4096] = [EMPTY; 4096];
 
-            let magic = &mut magics[square as usize];
+            let magic = &mut magics[square];
             magic.mask = mask;
             magic.shift = 64 - mask.count_ones() as u8;
             magic.offset = offset;
             magic.number = match piece_type {
-                PieceType::ROOK => ROOK_MAGIC_NUMBERS[square as usize],
-                PieceType::BISHOP => BISHOP_MAGIC_NUMBERS[square as usize],
+                PieceType::ROOK => ROOK_MAGIC_NUMBERS[square],
+                PieceType::BISHOP => BISHOP_MAGIC_NUMBERS[square],
                 _ => panic!("Invalid piece."),
             };
 
@@ -206,7 +206,7 @@ impl Bitboards {
     }
 
     pub fn aligned(&self, a: Square, b: Square, c: Square) -> bool {
-        return self.line_bb[a][b] & square_bb(c) != EMPTY;
+        self.line_bb[a][b] & square_bb(c) != EMPTY
     }
 
     #[allow(dead_code)]
@@ -224,6 +224,6 @@ impl Bitboards {
             output += format!("| {}\n+---+---+---+---+---+---+---+---+\n", rank + 1).as_str();
         }
 
-        return output;
+        output
     }
 }

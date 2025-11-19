@@ -11,7 +11,7 @@ pub struct Magic {
 impl Magic {
     pub fn get_index(&self, occupied: Bitboard) -> usize {
         let blockerboard: u64 = occupied & self.mask;
-        return ((blockerboard.wrapping_mul(self.number) >> self.shift) + self.offset) as usize;
+        ((blockerboard.wrapping_mul(self.number) >> self.shift) + self.offset) as usize
     }
 }
 
@@ -22,18 +22,18 @@ pub const FILE_ABB: Bitboard = 0x0101010101010101;
 pub const FILE_HBB: Bitboard = FILE_ABB << 7;
 
 pub const RANK_1BB: Bitboard = 0xff;
-pub const RANK_2BB: Bitboard = RANK_1BB << (8 * 1);
+pub const RANK_2BB: Bitboard = RANK_1BB << 8;
 pub const RANK_3BB: Bitboard = RANK_1BB << (8 * 2);
 pub const RANK_6BB: Bitboard = RANK_1BB << (8 * 5);
 pub const RANK_7BB: Bitboard = RANK_1BB << (8 * 6);
 pub const RANK_8BB: Bitboard = RANK_1BB << (8 * 7);
 
 pub fn file_bb(square: Square) -> Bitboard {
-    return FILE_ABB << (square % 8);
+    FILE_ABB << (square % 8)
 }
 
 pub fn rank_bb(square: Square) -> Bitboard {
-    return RANK_1BB << (square / 8) * 8;
+    RANK_1BB << ((square / 8) * 8)
 }
 
 #[rustfmt::skip]

@@ -12,13 +12,13 @@ pub struct StateInfo {
 
 impl StateInfo {
     pub fn new() -> Self {
-        return Self {
+        Self {
             en_passant_square: NONE_SQUARE,
             captured_piece: PieceType::NONE,
             castling_rights: CastlingRights::NONE,
             rule50: 0,
             game_ply: 0,
-        };
+        }
     }
 }
 

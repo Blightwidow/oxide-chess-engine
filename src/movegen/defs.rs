@@ -25,11 +25,11 @@ impl CastlingRights {
 }
 
 pub fn pawn_push(side: Side) -> Direction {
-    return match side {
+    match side {
         Sides::WHITE => Directions::UP,
         Sides::BLACK => Directions::DOWN,
         _ => panic!("Invalid side"),
-    };
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -38,11 +38,11 @@ pub struct Move {
 }
 impl Move {
     pub fn new(data: u16) -> Self {
-        return Self { data: data };
+        Self { data }
     }
 
     pub fn with_from_to(from: Square, to: Square) -> Self {
-        return Self::new(((from << 6) + to) as u16);
+        Self::new(((from << 6) + to) as u16)
     }
 
     pub fn make(from: Square, to: Square, promotion_type: Piece, movetype: MoveType) -> Self {
@@ -53,38 +53,38 @@ impl Move {
             PieceType::QUEEN => PieceType::QUEEN - PieceType::KNIGHT,
             _ => 0,
         };
-        return Self::new(movetype + (promotion_value << 12) as u16 + (from << 6) as u16 + to as u16);
+        Self::new(movetype + (promotion_value << 12) as u16 + (from << 6) as u16 + to as u16)
     }
 
     pub fn from_sq(&self) -> Square {
-        return (self.data >> 6) as Square & 0b111111;
+        (self.data >> 6) as Square & 0b111111
     }
 
     pub fn to_sq(&self) -> Square {
-        return (self.data & 0b111111) as Square;
+        (self.data & 0b111111) as Square
     }
 
     pub fn type_of(&self) -> MoveType {
-        return self.data & 0xC000;
+        self.data & 0xC000
     }
 
     pub fn promotion_type(&self) -> Piece {
         if self.type_of() != MoveTypes::PROMOTION {
             return PieceType::NONE;
         }
-        return ((self.data >> 12) & 0b11) as usize + PieceType::KNIGHT;
+        ((self.data >> 12) & 0b11) as usize + PieceType::KNIGHT
     }
 
     pub fn is_ok(&self) -> bool {
-        return Self::none().data != self.data && Self::null().data != self.data;
+        Self::none().data != self.data && Self::null().data != self.data
     }
 
     pub fn null() -> Self {
-        return Self { data: 65 };
+        Self { data: 65 }
     }
 
     pub fn none() -> Self {
-        return Self { data: 0 };
+        Self { data: 0 }
     }
 }
 
@@ -100,7 +100,7 @@ impl fmt::Debug for Move {
 
         if self.type_of() == MoveTypes::CASTLING {
             to = match self.to_sq() {
-                0 => 0 + 2,
+                0 => 2,
                 7 => 7 - 1,
                 56 => 56 + 2,
                 63 => 63 - 1,
@@ -117,12 +117,12 @@ impl fmt::Debug for Move {
             _ => panic!("Invalid promotion type"),
         };
 
-        return write!(
+        write!(
             f,
             "{}{}{}",
             pretty_square(self.from_sq()),
             pretty_square(to),
             promotion_string
-        );
+        )
     }
 }

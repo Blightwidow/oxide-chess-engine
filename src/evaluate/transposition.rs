@@ -20,12 +20,12 @@ pub struct HashData {
 
 impl HashData {
     pub fn default() -> Self {
-        return Self {
+        Self {
             depth: 0,
             value: 0,
             best_move: Move::none(),
             node_type: NodeType::EXACT,
-        };
+        }
     }
 }
 
@@ -42,7 +42,7 @@ impl TranspositionTable {
         let size = megabytes * 1024 * 1024;
         let nb_entries = size / std::mem::size_of::<Entry>();
 
-        return Self {
+        Self {
             entries: vec![
                 Entry {
                     key: 0,
@@ -51,7 +51,7 @@ impl TranspositionTable {
                 nb_entries
             ],
             size: nb_entries,
-        };
+        }
     }
 
     pub fn store(&mut self, key: u64, data: HashData) {
@@ -74,6 +74,6 @@ impl TranspositionTable {
             return Some(&entry.data);
         }
 
-        return None;
+        None
     }
 }

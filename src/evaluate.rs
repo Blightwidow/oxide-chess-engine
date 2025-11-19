@@ -2,7 +2,7 @@ pub mod defs;
 mod tables;
 pub mod transposition;
 
-use crate::{defs::*, movegen::defs::Move, position::Position, search::defs::VALUE_INFINITE};
+use crate::{defs::*, position::Position, search::defs::VALUE_INFINITE};
 
 use self::{defs::*, tables::*, transposition::TranspositionTable};
 
@@ -48,7 +48,7 @@ impl Eval {
             false => (mg_score * phase + eg_score * (24 - phase)) / 24,
         };
 
-        return score.min(VALUE_INFINITE).max(-VALUE_INFINITE);
+        score.min(VALUE_INFINITE).max(-VALUE_INFINITE)
     }
 
     pub fn resize_transposition_table(&mut self, megabytes: usize) {

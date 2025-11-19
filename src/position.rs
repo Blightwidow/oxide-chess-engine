@@ -27,8 +27,8 @@ pub struct Position {
 
 impl Position {
     pub fn new(bitboards: Rc<Bitboards>) -> Self {
-        return Self {
-            bitboards: bitboards,
+        Self {
+            bitboards,
             by_type_bb: [[EMPTY; NrOf::PIECE_TYPES]; NrOf::SIDES],
             by_color_bb: [EMPTY; NrOf::SIDES],
             pinned_bb: [EMPTY; NrOf::SIDES],
@@ -37,7 +37,7 @@ impl Position {
             states: vec![StateInfo::new()],
             castling_masks: Position::castling_masks(),
             zobrist: 0u64,
-        };
+        }
     }
 
     // This assume that the move is legal
@@ -120,7 +120,7 @@ impl Position {
         #[cfg(debug_assertions)]
         assert!(mv.is_ok());
 
-        self.side_to_move = self.side_to_move ^ 1;
+        self.side_to_move ^= 1;
         let us: Side = self.side_to_move;
         let them: Side = self.side_to_move ^ 1;
         let from: Square = mv.from_sq();
@@ -173,7 +173,7 @@ impl Position {
         #[cfg(debug_assertions)]
         assert!(is_ok(square), "Invalid square {}", square);
 
-        return self.board[square];
+        self.board[square]
     }
 
     fn put_piece(&mut self, piece: Piece, square: Square) {
@@ -289,7 +289,7 @@ impl Position {
             }
         }
 
-        return checkers;
+        checkers
     }
 
     fn attacks_bb(&self, side: Side, occupied: Bitboard) -> Bitboard {
@@ -302,7 +302,7 @@ impl Position {
             attacks_bb |= self.bitboards.attack_bb(self.piece_on(square), square, occupied);
         }
 
-        return attacks_bb;
+        attacks_bb
     }
 
     fn pinned_bb(&self, side: Side) -> Bitboard {
@@ -327,7 +327,7 @@ impl Position {
             }
         }
 
-        return pinned_bb;
+        pinned_bb
     }
 
     pub fn legal(&self, mv: Move) -> bool {
@@ -384,10 +384,10 @@ impl Position {
 
         // A non-king move is legal if and only if it is not pinned or it
         // is moving along the ray towards or away from the king.
-        return self.pinned_bb[us] & square_bb(from) == EMPTY
+        self.pinned_bb[us] & square_bb(from) == EMPTY
             || self
                 .bitboards
-                .aligned(to, from, bits::lsb(self.by_type_bb[us][PieceType::KING]));
+                .aligned(to, from, bits::lsb(self.by_type_bb[us][PieceType::KING]))
     }
 
     fn castling_masks() -> [usize; NrOf::SQUARES] {
@@ -400,6 +400,6 @@ impl Position {
         masks[square_of(4, 0)] = CastlingRights::WHITE;
         masks[square_of(4, 7)] = CastlingRights::BLACK;
 
-        return masks;
+        masks
     }
 }

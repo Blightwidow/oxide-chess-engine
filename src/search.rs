@@ -1,15 +1,13 @@
 pub mod defs;
 mod test;
 
-use core::num;
-use std::{cmp, ops::Add, time};
+use std::cmp;
 
 use crate::{
-    evaluate::{defs::PAWN_UNIT, transposition::NodeType, Eval},
+    evaluate::{defs::PAWN_UNIT, Eval},
     movegen::{defs::Move, Movegen},
     position::Position,
     time::TimeManager,
-    uci::UCI,
 };
 
 use self::defs::*;
@@ -33,7 +31,7 @@ impl Search {
         };
         search.position.set(FEN_START_POSITION.to_string());
 
-        return search;
+        search
     }
 
     pub fn run(&mut self, limits: SearchLimits) {
@@ -67,7 +65,7 @@ impl Search {
             .map(|&mv| (mv, 0i64))
             .collect::<arrayvec::ArrayVec<(Move, i64), 256>>();
 
-        if movelist.len() == 0 {
+        if movelist.is_empty() {
             println!("bestmove 0000");
             return;
         } else if movelist.len() == 1 {
@@ -100,7 +98,7 @@ impl Search {
 
         loop {
             let (score, index) = self.search_root(moves, alpha, beta, depth)?;
-            (&mut moves[0..index + 1]).rotate_right(1);
+            moves[0..index + 1].rotate_right(1);
 
             delta += delta / 3;
 
@@ -161,7 +159,7 @@ impl Search {
             }
         }
 
-        return Some((best_score, best_move_index));
+        Some((best_score, best_move_index))
     }
 
     fn search(&mut self, alpha: i16, beta: i16, depth: u8) -> Option<i16> {
@@ -218,7 +216,7 @@ impl Search {
             }
         }
 
-        return Some(best_score);
+        Some(best_score)
     }
 
     fn perft(&mut self, depth: u8, root: bool) -> u128 {
@@ -246,6 +244,6 @@ impl Search {
             }
         }
 
-        return nodes;
+        nodes
     }
 }
