@@ -24,10 +24,19 @@ pub struct Search {
     pub nodes_searched: usize,
     time: TimeManager,
     killers: [[Move; 2]; MAX_PLY],
+    history: [[i32; 64]; 64],
+    lmr_table: [[u8; 64]; 128],
 }
 
 impl Search {
     pub fn new(position: Position, movegen: Movegen, eval: Eval) -> Self {
+        let mut lmr_table = [[0u8; 64]; 128];
+        for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
+            for (move_num, entry) in row.iter_mut().enumerate().skip(1) {
+                *entry = ((depth as f64).ln() * (move_num as f64).ln() / 2.0) as u8;
+            }
+        }
+
         let mut search = Self {
             position,
             movegen,
@@ -35,6 +44,8 @@ impl Search {
             eval,
             time: TimeManager::default(),
             killers: [[Move::none(); 2]; MAX_PLY],
+            history: [[0; 64]; 64],
+            lmr_table,
         };
         search.position.set(FEN_START_POSITION.to_string());
 
@@ -44,6 +55,7 @@ impl Search {
     pub fn run(&mut self, limits: SearchLimits) {
         self.nodes_searched = 0;
         self.killers = [[Move::none(); 2]; MAX_PLY];
+        self.history = [[0; 64]; 64];
 
         if limits.perft > 0 {
             let nodes = self.perft(limits.perft, true);
@@ -114,8 +126,8 @@ impl Search {
                 break;
             }
 
-            let mut best_score = -VALUE_INFINITE;
-            let mut current_best_move: Option<Move> = None;
+            let mut best_score;
+            let mut current_best_move: Option<Move>;
 
             let sorted_moves: Vec<Move> = if move_scores.is_empty() {
                 moves.to_vec()
@@ -126,31 +138,70 @@ impl Search {
                 sorted
             };
 
-            for &mv in sorted_moves.iter() {
-                self.position.do_move(mv);
+            // Aspiration windows
+            let (mut alpha, mut beta) = if current_depth >= 4 && best_score_overall.abs() < VALUE_MATE - 100 {
+                (best_score_overall.saturating_sub(25), best_score_overall.saturating_add(25))
+            } else {
+                (-VALUE_INFINITE, VALUE_INFINITE)
+            };
 
-                let score = self.alpha_beta(current_depth - 1, -VALUE_INFINITE, VALUE_INFINITE, 1).map(|score| -score);
+            let mut failed = 0u8; // track re-search attempts
 
-                self.position.undo_move(mv);
+            loop {
+                best_score = -VALUE_INFINITE;
+                current_best_move = None;
 
-                move_scores.push((mv, score));
+                for &mv in sorted_moves.iter() {
+                    self.position.do_move(mv);
+                    let score = self.alpha_beta(current_depth - 1, -beta, -alpha, 1, true).map(|s| -s);
+                    self.position.undo_move(mv);
 
-                match score {
-                    Some(score) => {
-                        if score >= best_score {
-                            best_score = score;
-                            current_best_move = Some(mv);
-                            best_move = Some(mv);
-                            best_score_overall = score;
+                    // Only update move_scores on first attempt (or when we have none)
+                    if failed == 0 {
+                        move_scores.push((mv, score));
+                    }
+
+                    match score {
+                        Some(score) => {
+                            if score > best_score {
+                                best_score = score;
+                                current_best_move = Some(mv);
+                            }
+                        }
+                        None => {
+                            // Time's up
+                            break;
                         }
                     }
-                    None => {
-                        break;
+                }
+
+                // Check if we need to re-search with wider window
+                if current_best_move.is_some() && failed < 2 {
+                    if best_score <= alpha {
+                        // Fail low - widen alpha
+                        alpha = if failed == 0 { alpha.saturating_sub(100) } else { -VALUE_INFINITE };
+                        failed += 1;
+                        if failed == 1 {
+                            move_scores.clear();
+                        }
+                        continue;
+                    }
+                    if best_score >= beta {
+                        // Fail high - widen beta
+                        beta = if failed == 0 { beta.saturating_add(100) } else { VALUE_INFINITE };
+                        failed += 1;
+                        if failed == 1 {
+                            move_scores.clear();
+                        }
+                        continue;
                     }
                 }
+                break;
             }
 
             if let Some(mv) = current_best_move {
+                best_move = Some(mv);
+                best_score_overall = best_score;
                 println!(
                     "info depth {} score cp {} nodes {} pv {:?}",
                     current_depth, best_score, self.nodes_searched, mv
@@ -198,10 +249,18 @@ impl Search {
             }
         }
 
-        0
+        // History heuristic
+        self.history[from_sq][to_sq]
     }
 
-    fn alpha_beta(&mut self, depth: u8, mut alpha: i16, beta: i16, ply: usize) -> Option<i16> {
+    fn alpha_beta(
+        &mut self,
+        depth: u8,
+        mut alpha: i16,
+        beta: i16,
+        ply: usize,
+        allow_null: bool,
+    ) -> Option<i16> {
         if self.time.should_stop() {
             return None;
         }
@@ -237,6 +296,30 @@ impl Search {
             return self.quiescence(alpha, beta, ply);
         }
 
+        // Null Move Pruning
+        if allow_null && !in_check && search_depth >= 3 {
+            let us = self.position.side_to_move;
+            let non_pawn_material = self.position.by_color_bb[us]
+                & !self.position.by_type_bb[us][PieceType::PAWN]
+                & !self.position.by_type_bb[us][PieceType::KING];
+            if non_pawn_material != 0 {
+                let r = 3 + (search_depth as usize / 4);
+                let reduced_depth = search_depth.saturating_sub(r as u8);
+
+                self.position.do_null_move();
+                let score = self
+                    .alpha_beta(reduced_depth, -beta, -beta + 1, ply + 1, false)
+                    .map(|s| -s);
+                self.position.undo_null_move();
+
+                match score {
+                    Some(s) if s >= beta => return Some(beta),
+                    None => return None,
+                    _ => {}
+                }
+            }
+        }
+
         let moves = self.movegen.legal_moves(&self.position);
 
         // Check for terminal positions
@@ -256,7 +339,7 @@ impl Search {
         let mut best_score = -VALUE_INFINITE;
 
         // Incremental selection sort: pick the best move each iteration
-        for i in 0..scored_moves.len() {
+        for (moves_searched, i) in (0..scored_moves.len()).enumerate() {
             // Find the best-scored move from i..end
             let mut best_idx = i;
             for j in (i + 1)..scored_moves.len() {
@@ -267,9 +350,56 @@ impl Search {
             scored_moves.swap(i, best_idx);
 
             let mv = scored_moves[i].0;
+            let move_score = scored_moves[i].1;
+
+            // Check capture/promotion before do_move since board changes
+            let to_sq = mv.to_sq();
+            let move_type = mv.type_of();
+            let is_capture = self.position.board[to_sq] != PieceType::NONE
+                || move_type == MoveTypes::EN_PASSANT;
+            let is_promotion = move_type == MoveTypes::PROMOTION;
+            let is_killer = move_score == 90_000 || move_score == 80_000;
 
             self.position.do_move(mv);
-            let score = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1).map(|s| -s);
+
+            let score;
+            if moves_searched == 0 {
+                // First move: full window search
+                score = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
+            } else {
+
+                // LMR conditions
+                let do_lmr = !in_check && !is_capture && !is_promotion && !is_killer
+                    && moves_searched >= 3 && search_depth >= 3;
+
+                let reduction = if do_lmr {
+                    self.lmr_table[search_depth as usize][moves_searched.min(63)]
+                } else {
+                    0
+                };
+
+                let reduced_depth = (search_depth - 1).saturating_sub(reduction);
+
+                // Null window search (possibly at reduced depth)
+                let mut s = self.alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
+
+                // If LMR reduced and failed high, re-search at full depth with null window
+                if let Some(val) = s {
+                    if val > alpha && reduction > 0 {
+                        s = self.alpha_beta(search_depth - 1, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
+                    }
+                }
+
+                // PVS re-search: if null window failed high within bounds, full window
+                if let Some(val) = s {
+                    if val > alpha && val < beta {
+                        s = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
+                    }
+                }
+
+                score = s;
+            }
+
             self.position.undo_move(mv);
 
             match score {
@@ -279,12 +409,14 @@ impl Search {
                         best_move = mv;
                     }
                     if score >= beta {
-                        // Killer move: store quiet moves that cause beta cutoffs
+                        // Killer move and history: store quiet moves that cause beta cutoffs
                         let is_capture = self.position.board[mv.to_sq()] != PieceType::NONE
                             || mv.type_of() == MoveTypes::EN_PASSANT;
                         if !is_capture && ply < MAX_PLY {
                             self.killers[ply][1] = self.killers[ply][0];
                             self.killers[ply][0] = mv;
+                            self.history[mv.from_sq()][mv.to_sq()] +=
+                                (search_depth as i32) * (search_depth as i32);
                         }
 
                         self.eval.transposition_table.store(

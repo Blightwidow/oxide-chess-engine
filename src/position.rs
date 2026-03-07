@@ -168,6 +168,32 @@ impl Position {
         self.states.push(new_state);
     }
 
+    pub fn do_null_move(&mut self) {
+        let mut new_state = *self.states.last().unwrap();
+        new_state.zobrist = self.zobrist;
+
+        // XOR out en passant from zobrist if any, set EP to NONE_SQUARE
+        if new_state.en_passant_square != NONE_SQUARE {
+            self.zobrist ^= self.hasher.en_passant_keys[file_of(new_state.en_passant_square)];
+            new_state.en_passant_square = NONE_SQUARE;
+        }
+
+        // Toggle side in zobrist
+        self.zobrist ^= self.hasher.side_key;
+        self.side_to_move ^= 1;
+
+        new_state.captured_piece = PieceType::NONE;
+        new_state.rule50 += 1;
+        new_state.game_ply += 1;
+        self.states.push(new_state);
+    }
+
+    pub fn undo_null_move(&mut self) {
+        let last_state = self.states.pop().unwrap();
+        self.zobrist = last_state.zobrist;
+        self.side_to_move ^= 1;
+    }
+
     pub fn undo_move(&mut self, mv: Move) {
         #[cfg(debug_assertions)]
         assert!(mv.is_ok());
