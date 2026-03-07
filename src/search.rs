@@ -1,10 +1,11 @@
 pub mod defs;
 mod test;
 
-use std::cmp;
-
 use crate::{
-    evaluate::{defs::PAWN_UNIT, Eval},
+    evaluate::{
+        transposition::{HashData, NodeType},
+        Eval,
+    },
     movegen::{defs::Move, Movegen},
     position::Position,
     time::TimeManager,
@@ -50,173 +51,16 @@ impl Search {
         );
 
         if limits.depth > 0 {
-            self.iterative_deepening(limits);
+            let best_move = self.search(limits.depth);
+            if let Some(mv) = best_move {
+                println!("bestmove {:?}", mv);
+            } else {
+                println!("bestmove 0000");
+            }
         } else {
             let score = self.eval.evaluate(&self.position);
             println!("info depth 0 score cp {}", score);
         }
-    }
-
-    fn iterative_deepening(&mut self, limits: SearchLimits) {
-        let mut movelist = self
-            .movegen
-            .legal_moves(&self.position)
-            .iter()
-            .map(|&mv| (mv, 0i64))
-            .collect::<arrayvec::ArrayVec<(Move, i64), 256>>();
-
-        if movelist.is_empty() {
-            println!("bestmove 0000");
-            return;
-        } else if movelist.len() == 1 {
-            println!("bestmove {:?}", movelist[0]);
-            return;
-        }
-
-        let mut last_score: i16 = 0;
-
-        for depth in 1u8..limits.depth + 1 {
-            if self.time.should_stop() {
-                break;
-            }
-
-            if let Some(best_score) = self.aspiration_window(last_score, &mut movelist, depth) {
-                last_score = best_score;
-                movelist[1..].sort_by_key(|&(_, subtree_size)| -subtree_size)
-            }
-
-            println!("info depth {} score cp {} pv {:?}", depth, last_score, movelist[0].0);
-        }
-
-        println!("bestmove {:?}", movelist[0].0);
-    }
-
-    fn aspiration_window(&mut self, last_score: i16, moves: &mut [(Move, i64)], depth: u8) -> Option<i16> {
-        let mut delta = PAWN_UNIT / 2;
-        let mut alpha = cmp::max(last_score - delta, -VALUE_MATE);
-        let mut beta = cmp::min(last_score + delta, VALUE_MATE);
-
-        loop {
-            let (score, index) = self.search_root(moves, alpha, beta, depth)?;
-            moves[0..index + 1].rotate_right(1);
-
-            delta += delta / 3;
-
-            if score >= beta {
-                beta = cmp::min(VALUE_MATE, score + delta);
-            } else if score <= alpha {
-                alpha = cmp::max(score - delta, -VALUE_MATE);
-            } else {
-                return Some(score);
-            }
-        }
-    }
-
-    fn search_root(&mut self, moves: &mut [(Move, i64)], alpha: i16, beta: i16, depth: u8) -> Option<(i16, usize)> {
-        let mut alpha = alpha;
-        let mut best_score = -VALUE_INFINITE;
-        let mut best_move_index = 0;
-        let mut increased_alpha = false;
-
-        for (i, &mut (mv, ref mut subtree_size)) in moves.iter_mut().enumerate() {
-            self.position.do_move(mv);
-            let mut score = Some(VALUE_INFINITE);
-
-            if i > 0 {
-                score = self.search(-alpha - 1, -alpha, depth).map(|v| -v);
-            }
-
-            if Some(alpha) < score {
-                score = self.search(-beta, -alpha, depth).map(|v| -v);
-            }
-
-            self.position.undo_move(mv);
-
-            match score {
-                None => {
-                    if increased_alpha {
-                        return Some((best_score, best_move_index));
-                    } else {
-                        return None;
-                    }
-                }
-                Some(value) => {
-                    if value > best_score {
-                        best_score = value;
-                        best_move_index = i;
-                    }
-
-                    if value > alpha {
-                        alpha = value;
-                        increased_alpha = true;
-                        // self.add_pv_move(mov, 0);
-                    }
-
-                    if value >= beta {
-                        break;
-                    }
-                }
-            }
-        }
-
-        Some((best_score, best_move_index))
-    }
-
-    fn search(&mut self, alpha: i16, beta: i16, depth: u8) -> Option<i16> {
-        if self.time.should_stop() {
-            return None;
-        }
-
-        if depth == 0 {
-            return Some(self.eval.evaluate(&self.position));
-        }
-
-        let is_pv = alpha + 1 != beta;
-
-        // TODO: Add check for Draw  and 50 move rule ?
-
-        let movelist = self.movegen.legal_moves(&self.position);
-        let mut alpha = alpha;
-        let mut best_score = -VALUE_MATE;
-        let mut num_moves_searched = 0;
-
-        for mv in movelist {
-            self.position.do_move(mv);
-            let mut score: Option<i16> = Some(VALUE_MATE);
-
-            if !(is_pv && num_moves_searched == 0) {
-                score = self.search(-alpha - 1, -alpha, depth - 1).map(|v| -v);
-            }
-
-            num_moves_searched += 1;
-
-            if Some(alpha) < score && is_pv {
-                score = self.search(-beta, -alpha, depth - 1).map(|v| -v);
-            }
-
-            self.position.undo_move(mv);
-
-            match score {
-                None => {
-                    return None;
-                }
-                Some(value) => {
-                    if value > best_score {
-                        best_score = value;
-                    }
-
-                    if value > alpha {
-                        alpha = value;
-                    }
-
-                    if value >= beta {
-                        break;
-                    }
-                }
-            }
-        }
-
-        Some(best_score)
     }
 
     fn perft(&mut self, depth: u8, root: bool) -> u128 {
@@ -245,5 +89,170 @@ impl Search {
         }
 
         nodes
+    }
+
+    fn search(&mut self, max_depth: u8) -> Option<Move> {
+        let moves = self.movegen.legal_moves(&self.position);
+
+        if moves.is_empty() {
+            return None;
+        }
+
+        // Store move scores from previous iteration for move ordering
+        let mut move_scores: Vec<(Move, Option<i16>)> = Vec::new();
+        let mut best_move: Option<Move> = None;
+
+        // Iterative deepening: search from depth 1 to max_depth
+        for current_depth in 1..=max_depth {
+            if self.time.should_stop() {
+                break;
+            }
+
+            let mut best_score = -VALUE_INFINITE;
+            let mut current_best_move: Option<Move> = None;
+
+            // Sort moves by score from previous iteration (best moves first)
+            let sorted_moves: Vec<Move> = if move_scores.is_empty() {
+                // First iteration: no previous scores, use all moves as-is
+                moves.clone()
+            } else {
+                // Sort by score (descending) - best moves first
+                move_scores.sort_by(|a, b| b.1.cmp(&a.1));
+                let sorted: Vec<Move> = move_scores.iter().map(|(mv, _)| *mv).collect();
+                // Clear move scores for this iteration
+                move_scores.clear();
+                sorted
+            };
+
+            // Search each move at current depth
+            for &mv in sorted_moves.iter() {
+                self.position.do_move(mv);
+
+                let score = self.alpha_beta(current_depth - 1, -VALUE_INFINITE, VALUE_INFINITE).map(|score| -score);
+
+                self.position.undo_move(mv);
+
+                // Store score for move ordering in next iteration
+                move_scores.push((mv, score));
+
+                match score {
+                    Some(score) => {
+                        if score >= best_score {
+                            best_score = score;
+                            current_best_move = Some(mv);
+                            best_move = Some(mv);
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+
+            // Print search info after completing each depth
+            if let Some(mv) = current_best_move {
+                println!(
+                    "info depth {} score cp {} nodes {} pv {:?}",
+                    current_depth, best_score, self.nodes_searched, mv
+                );
+            }
+        }
+
+        best_move
+    }
+
+    fn alpha_beta(&mut self, depth: u8, mut alpha: i16, beta: i16) -> Option<i16> {
+        if self.time.should_stop() {
+            return None;
+        }
+        self.nodes_searched += 1;
+
+        // TT probe
+        let zobrist = self.position.zobrist;
+        if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
+            if entry.depth >= depth {
+                match entry.node_type {
+                    NodeType::EXACT => return Some(entry.value),
+                    NodeType::LOWERBOUND => {
+                        if entry.value >= beta {
+                            return Some(entry.value);
+                        }
+                    }
+                    NodeType::UPPERBOUND => {
+                        if entry.value <= alpha {
+                            return Some(entry.value);
+                        }
+                    }
+                }
+            }
+        }
+
+        if depth == 0 {
+            return Some(self.eval.evaluate(&self.position));
+        }
+
+        let moves = self.movegen.legal_moves(&self.position);
+
+        // Check for terminal positions
+        if moves.is_empty() {
+            let checkers = self.position.checkers(self.position.side_to_move);
+            if !checkers.is_empty() {
+                return Some(-VALUE_MATE + (depth as i16));
+            } else {
+                return Some(VALUE_DRAW);
+            }
+        }
+
+        let original_alpha = alpha;
+        let mut best_move = Move::none();
+
+        // Search all moves
+        for &mv in moves.iter() {
+            self.position.do_move(mv);
+            let score = self.alpha_beta(depth - 1, -beta, -alpha).map(|score| -score);
+            self.position.undo_move(mv);
+
+            match score {
+                Some(score) => {
+                    if score >= beta {
+                        self.eval.transposition_table.store(
+                            zobrist,
+                            HashData {
+                                depth,
+                                value: beta,
+                                best_move: mv,
+                                node_type: NodeType::LOWERBOUND,
+                            },
+                        );
+                        return Some(beta);
+                    }
+                    if score > alpha {
+                        alpha = score;
+                        best_move = mv;
+                    }
+                }
+                None => {
+                    return None;
+                }
+            }
+        }
+
+        // Store in TT
+        let node_type = if alpha > original_alpha {
+            NodeType::EXACT
+        } else {
+            NodeType::UPPERBOUND
+        };
+        self.eval.transposition_table.store(
+            zobrist,
+            HashData {
+                depth,
+                value: alpha,
+                best_move,
+                node_type,
+            },
+        );
+
+        Some(alpha)
     }
 }

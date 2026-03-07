@@ -58,11 +58,17 @@ impl TranspositionTable {
         let index = key % self.size as u64;
         let entry = &mut self.entries[index as usize];
 
-        if entry.key == key {
-            entry.data = data;
-        } else if entry.key == 0 {
+        // Replace if: empty slot, same key, or new depth >= existing depth
+        if entry.key == 0 || entry.key == key || data.depth >= entry.data.depth {
             entry.key = key;
             entry.data = data;
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for entry in self.entries.iter_mut() {
+            entry.key = 0;
+            entry.data = HashData::default();
         }
     }
 

@@ -17,6 +17,17 @@ cargo build -r
 ./taget/release/chessbot <command>
 ```
 
+## Test your changes
+
+### SPRT Test
+
+```
+cargo build -r --target-dir=base
+# Change your engine
+cargo build -r
+./bin/fastchess -engine cmd=./target/release/chessbot name=oxide -engine cmd=./base/release/chessbot name=engine_BASE -each tc=8+0.08 -rounds 15000 -repeat -concurrency 6 -recover -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05
+```
+
 ## Internal implementation
 
 ### Board representation

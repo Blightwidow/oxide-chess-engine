@@ -45,6 +45,7 @@ impl UCI {
                 println!("readyok");
             } else if token == "ucinewgame" {
                 search.position.set(FEN_START_POSITION.to_string());
+                search.eval.transposition_table.clear();
             } else if token == "position" {
                 UCI::position(search, &mut args);
             } else if token == "go" {
@@ -124,10 +125,10 @@ impl UCI {
                     limits.black_time = args.next().unwrap_or("0").parse::<u64>().unwrap_or(0);
                 }
                 "winc" => {
-                    limits.white_inc = args.next().unwrap_or("0").parse::<usize>().unwrap_or(0);
+                    limits.white_inc = args.next().unwrap_or("0").parse::<u64>().unwrap_or(0u64);
                 }
                 "binc" => {
-                    limits.black_inc = args.next().unwrap_or("0").parse::<usize>().unwrap_or(0);
+                    limits.black_inc = args.next().unwrap_or("0").parse::<u64>().unwrap_or(0u64);
                 }
                 "movestogo" => {
                     limits.moves_to_go = args.next().unwrap_or("0").parse::<usize>().unwrap_or(0);

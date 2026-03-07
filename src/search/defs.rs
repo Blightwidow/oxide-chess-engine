@@ -9,8 +9,8 @@ pub struct SearchLimits {
     pub ponder: bool,
     pub white_time: u64,
     pub black_time: u64,
-    pub white_inc: usize,
-    pub black_inc: usize,
+    pub white_inc: u64,
+    pub black_inc: u64,
     pub moves_to_go: usize,
     pub nodes: usize,
     pub mate: usize,
@@ -38,6 +38,14 @@ impl SearchLimits {
         match side {
             Sides::WHITE => self.white_time,
             Sides::BLACK => self.black_time,
+            _ => panic!("Invalid side"),
+        }
+    }
+
+    pub fn increment(&self, side: Side) -> u64 {
+        match side {
+            Sides::WHITE => self.white_inc,
+            Sides::BLACK => self.black_inc,
             _ => panic!("Invalid side"),
         }
     }

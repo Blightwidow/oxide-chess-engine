@@ -8,6 +8,7 @@ pub struct StateInfo {
     pub castling_rights: usize,
     pub rule50: usize,
     pub game_ply: usize,
+    pub zobrist: u64,
 }
 
 impl StateInfo {
@@ -18,6 +19,7 @@ impl StateInfo {
             castling_rights: CastlingRights::NONE,
             rule50: 0,
             game_ply: 0,
+            zobrist: 0,
         }
     }
 }

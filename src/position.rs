@@ -7,6 +7,7 @@ use std::rc::Rc;
 use crate::bitboards::defs::EMPTY;
 use crate::bitboards::Bitboards;
 use crate::defs::*;
+use crate::hash::Hasher;
 use crate::misc::bits;
 use crate::movegen::defs::{pawn_push, CastlingRight, CastlingRights, Move, MoveType, MoveTypes};
 
@@ -23,12 +24,14 @@ pub struct Position {
     pub castling_masks: [CastlingRight; NrOf::SQUARES],
     pub zobrist: u64,
     bitboards: Rc<Bitboards>,
+    hasher: Rc<Hasher>,
 }
 
 impl Position {
-    pub fn new(bitboards: Rc<Bitboards>) -> Self {
+    pub fn new(bitboards: Rc<Bitboards>, hasher: Rc<Hasher>) -> Self {
         Self {
             bitboards,
+            hasher,
             by_type_bb: [[EMPTY; NrOf::PIECE_TYPES]; NrOf::SIDES],
             by_color_bb: [EMPTY; NrOf::SIDES],
             pinned_bb: [EMPTY; NrOf::SIDES],
@@ -58,6 +61,7 @@ impl Position {
             _ => self.piece_on(to),
         };
         let mut new_state = *self.states.last().unwrap();
+        new_state.zobrist = self.zobrist;
 
         #[cfg(debug_assertions)]
         {
@@ -103,8 +107,55 @@ impl Position {
                 _ => panic!("Invalid side"),
             };
         } else {
-            new_state.en_passant_square = 0;
+            new_state.en_passant_square = NONE_SQUARE;
         }
+
+        // Zobrist: update hash
+        let old_state = self.states.last().unwrap();
+        // XOR out old castling, XOR in new castling
+        self.zobrist ^= self.hasher.castling_keys[old_state.castling_rights];
+        self.zobrist ^= self.hasher.castling_keys[new_state.castling_rights];
+        // XOR out old EP file if any
+        if old_state.en_passant_square != NONE_SQUARE {
+            self.zobrist ^= self.hasher.en_passant_keys[file_of(old_state.en_passant_square)];
+        }
+        // XOR in new EP file if any
+        if new_state.en_passant_square != NONE_SQUARE {
+            self.zobrist ^= self.hasher.en_passant_keys[file_of(new_state.en_passant_square)];
+        }
+
+        // Piece updates
+        if captured != PieceType::NONE {
+            let captured_square: Square = match move_type {
+                MoveTypes::EN_PASSANT => (to as isize - pawn_push(us)) as usize,
+                _ => to,
+            };
+            self.zobrist ^= self.hasher.piece_key(color_of_piece(captured), type_of_piece(captured), captured_square);
+        }
+        if move_type == MoveTypes::PROMOTION {
+            self.zobrist ^= self.hasher.piece_key(us, PieceType::PAWN, from);
+            self.zobrist ^= self.hasher.piece_key(us, mv.promotion_type(), to);
+        } else if move_type == MoveTypes::CASTLING {
+            let king_side: bool = to > from;
+            let rook_to: Square = match king_side {
+                true => to - 2,
+                false => to + 3,
+            };
+            let king_to: Square = match king_side {
+                true => from + 2,
+                false => from - 2,
+            };
+            self.zobrist ^= self.hasher.piece_key(us, PieceType::KING, from);
+            self.zobrist ^= self.hasher.piece_key(us, PieceType::KING, king_to);
+            self.zobrist ^= self.hasher.piece_key(us, PieceType::ROOK, to);
+            self.zobrist ^= self.hasher.piece_key(us, PieceType::ROOK, rook_to);
+        } else {
+            self.zobrist ^= self.hasher.piece_key(us, type_of_piece(piece), from);
+            self.zobrist ^= self.hasher.piece_key(us, type_of_piece(piece), to);
+        }
+
+        // Toggle side
+        self.zobrist ^= self.hasher.side_key;
 
         self.side_to_move = them;
         new_state.captured_piece = captured;
@@ -128,6 +179,7 @@ impl Position {
         let mut piece: Piece = self.piece_on(to);
         let move_type: MoveType = mv.type_of();
         let last_state: StateInfo = self.states.pop().unwrap();
+        self.zobrist = last_state.zobrist;
 
         #[cfg(debug_assertions)]
         {
@@ -294,7 +346,7 @@ impl Position {
 
     fn attacks_bb(&self, side: Side, occupied: Bitboard) -> Bitboard {
         let mut attacks_bb: Bitboard = EMPTY;
-        let mut opponents: Bitboard = self.by_color_bb[side];
+        let mut opponents: Bitboard = self.by_color_bb[side] & occupied;
 
         while opponents != EMPTY {
             let square: Square = bits::pop(&mut opponents);

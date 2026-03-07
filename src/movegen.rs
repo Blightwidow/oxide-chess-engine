@@ -129,16 +129,33 @@ impl Movegen {
 
         // Pawns on rank 7 are already handled above
         let mut attackers_bb: Bitboard = pawns_outside_rank_7;
+        let state = position.states.last().unwrap();
+        // When in check, en passant can resolve it if the captured pawn is the checker.
+        // The EP square itself won't be in target_bb, so we include it explicitly.
+        let ep_target_bb: Bitboard = match state.en_passant_square {
+            NONE_SQUARE => target_bb,
+            ep_sq => {
+                let up_dir: Direction = match us {
+                    Sides::WHITE => Directions::UP,
+                    _ => Directions::DOWN,
+                };
+                let captured_sq = (ep_sq as isize - up_dir) as usize;
+                if target_bb & square_bb(captured_sq) != EMPTY {
+                    target_bb | square_bb(ep_sq)
+                } else {
+                    target_bb
+                }
+            }
+        };
 
         while attackers_bb != EMPTY {
             let from: Square = bits::pop(&mut attackers_bb);
-            let state = position.states.last().unwrap();
             let en_passant_bb: Bitboard = match state.en_passant_square {
                 NONE_SQUARE => EMPTY,
                 square => square_bb(square),
             };
             let mut attack_bb: Bitboard =
-                self.bitboards.attack_bb(piece, from, EMPTY) & (position.by_color_bb[them] | en_passant_bb) & target_bb;
+                self.bitboards.attack_bb(piece, from, EMPTY) & (position.by_color_bb[them] | en_passant_bb) & ep_target_bb;
 
             while attack_bb != EMPTY {
                 let to: Square = bits::pop(&mut attack_bb);

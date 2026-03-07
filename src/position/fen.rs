@@ -74,6 +74,23 @@ impl Position {
         for side in [Sides::WHITE, Sides::BLACK] {
             self.pinned_bb[side] = self.pinned_bb(side);
         }
+
+        // Compute initial Zobrist hash
+        self.zobrist = 0;
+        for sq in RangeOf::SQUARES {
+            let piece = self.board[sq];
+            if piece != PieceType::NONE {
+                self.zobrist ^= self.hasher.piece_key(color_of_piece(piece), type_of_piece(piece), sq);
+            }
+        }
+        if self.side_to_move == Sides::BLACK {
+            self.zobrist ^= self.hasher.side_key;
+        }
+        let state = self.states.last().unwrap();
+        self.zobrist ^= self.hasher.castling_keys[state.castling_rights];
+        if state.en_passant_square != NONE_SQUARE {
+            self.zobrist ^= self.hasher.en_passant_keys[file_of(state.en_passant_square)];
+        }
     }
 
     #[allow(dead_code)]
@@ -151,7 +168,7 @@ impl Position {
 
         fen.push(' ');
 
-        if self.states.last().unwrap().en_passant_square == 0 {
+        if self.states.last().unwrap().en_passant_square == NONE_SQUARE {
             fen.push('-');
         } else {
             fen += &pretty_square(self.states.last().unwrap().en_passant_square);

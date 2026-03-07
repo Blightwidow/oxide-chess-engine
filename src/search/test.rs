@@ -4,17 +4,23 @@ mod test {
 
     use crate::{
         bitboards::Bitboards,
+        hash::Hasher,
         movegen::Movegen,
         position::Position,
         search::{defs::FEN_START_POSITION, Search}, evaluate::Eval,
     };
 
+    fn make_search() -> Search {
+        let bitboards = Rc::new(Bitboards::new());
+        let hasher = Rc::new(Hasher::new());
+        let movegen = Movegen::new(Rc::clone(&bitboards));
+        let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
+        Search::new(position, movegen, Eval::new())
+    }
+
     #[test]
     fn perft_startpos() {
-        let bitboards = Rc::new(Bitboards::new());
-        let movegen = Movegen::new(Rc::clone(&bitboards));
-        let position = Position::new(Rc::clone(&bitboards));
-        let mut search = Search::new(position, movegen, Eval::new());
+        let mut search = make_search();
 
         search.position.set(FEN_START_POSITION.to_string());
 
@@ -27,10 +33,7 @@ mod test {
 
     #[test]
     fn perft_kiwipete() {
-        let bitboards = Rc::new(Bitboards::new());
-        let movegen = Movegen::new(Rc::clone(&bitboards));
-        let position = Position::new(Rc::clone(&bitboards));
-        let mut search = Search::new(position, movegen, Eval::new());
+        let mut search = make_search();
 
         search
             .position
@@ -45,10 +48,7 @@ mod test {
 
     #[test]
     fn perft_edwards() {
-        let bitboards = Rc::new(Bitboards::new());
-        let movegen = Movegen::new(Rc::clone(&bitboards));
-        let position = Position::new(Rc::clone(&bitboards));
-        let mut search = Search::new(position, movegen, Eval::new());
+        let mut search = make_search();
 
         search
             .position
@@ -63,10 +63,7 @@ mod test {
 
     #[test]
     fn perft_endgame() {
-        let bitboards = Rc::new(Bitboards::new());
-        let movegen = Movegen::new(Rc::clone(&bitboards));
-        let position = Position::new(Rc::clone(&bitboards));
-        let mut search = Search::new(position, movegen, Eval::new());
+        let mut search = make_search();
 
         search
             .position
@@ -81,10 +78,7 @@ mod test {
 
     #[test]
     fn perft_edwards_bis() {
-        let bitboards = Rc::new(Bitboards::new());
-        let movegen = Movegen::new(Rc::clone(&bitboards));
-        let position = Position::new(Rc::clone(&bitboards));
-        let mut search = Search::new(position, movegen, Eval::new());
+        let mut search = make_search();
 
         search
             .position

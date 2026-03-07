@@ -4,6 +4,7 @@ mod test {
 
     use crate::{
         bitboards::{defs::EMPTY, Bitboards},
+        hash::Hasher,
         movegen::Movegen,
         position::Position,
     };
@@ -11,9 +12,10 @@ mod test {
     #[test]
     fn do_undo() {
         let bitboards = Rc::new(Bitboards::new());
+        let hasher = Rc::new(Hasher::new());
         let movegen = Movegen::new(Rc::clone(&bitboards));
-        let mut initial_position = Position::new(Rc::clone(&bitboards));
-        let mut position = Position::new(Rc::clone(&bitboards));
+        let mut initial_position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
+        let mut position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
 
         let fen: &str = "r3k2r/p1pNqpb1/bn2pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq - 0 1";
         position.set(fen.to_string());
@@ -35,7 +37,8 @@ mod test {
     #[test]
     fn pinned_bb() {
         let bitboards = Rc::new(Bitboards::new());
-        let mut position = Position::new(Rc::clone(&bitboards));
+        let hasher = Rc::new(Hasher::new());
+        let mut position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
 
         let fen: &str = "rnbqkbnr/pp1ppppp/2p5/1B6/4P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2";
         position.set(fen.to_string());

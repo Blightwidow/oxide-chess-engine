@@ -30,9 +30,9 @@ impl Eval {
             if piece != PieceType::NONE {
                 let piece_type: Piece = type_of_piece(piece);
                 let color: Side = color_of_piece(piece);
-                let piece_index: Square = match color == us {
-                    true => square,
-                    false => square ^ 56,
+                let piece_index: Square = match color {
+                    Sides::WHITE => square ^ 56,
+                    _ => square,
                 };
 
                 middle_game[color] += PIECE_VALUES_MG[piece_type] + PIECE_SQUARE_MG_TABLES[piece_type][piece_index];
@@ -48,7 +48,7 @@ impl Eval {
             false => (mg_score * phase + eg_score * (24 - phase)) / 24,
         };
 
-        score.min(VALUE_INFINITE).max(-VALUE_INFINITE)
+        score.clamp(-VALUE_INFINITE, VALUE_INFINITE)
     }
 
     pub fn resize_transposition_table(&mut self, megabytes: usize) {

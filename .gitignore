@@ -14,8 +14,12 @@ Cargo.lock
 *.pdb
 
 # Added by cargo
-
 /target
+/base
+
+# fastchess
+config.json
+
 
 # Old files used as scratch space when thinking
 .archive/
