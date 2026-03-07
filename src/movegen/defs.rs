@@ -47,7 +47,7 @@ impl Move {
 
     pub fn make(from: Square, to: Square, promotion_type: Piece, movetype: MoveType) -> Self {
         let promotion_value = match promotion_type {
-            PieceType::KNIGHT => PieceType::KNIGHT - PieceType::KNIGHT,
+            PieceType::KNIGHT => 0,
             PieceType::BISHOP => PieceType::BISHOP - PieceType::KNIGHT,
             PieceType::ROOK => PieceType::ROOK - PieceType::KNIGHT,
             PieceType::QUEEN => PieceType::QUEEN - PieceType::KNIGHT,
@@ -56,11 +56,12 @@ impl Move {
         Self::new(movetype + (promotion_value << 12) as u16 + (from << 6) as u16 + to as u16)
     }
 
-    pub fn from_sq(&self) -> Square {
+    #[allow(clippy::wrong_self_convention)]
+    pub fn from_sq(self) -> Square {
         (self.data >> 6) as Square & 0b111111
     }
 
-    pub fn to_sq(&self) -> Square {
+    pub fn to_sq(self) -> Square {
         (self.data & 0b111111) as Square
     }
 
@@ -75,10 +76,12 @@ impl Move {
         ((self.data >> 12) & 0b11) as usize + PieceType::KNIGHT
     }
 
+    #[allow(dead_code)]
     pub fn is_ok(&self) -> bool {
         Self::none().data != self.data && Self::null().data != self.data
     }
 
+    #[allow(dead_code)]
     pub fn null() -> Self {
         Self { data: 65 }
     }
@@ -90,9 +93,7 @@ impl Move {
 
 impl fmt::Debug for Move {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.data == 0 {
-            return write!(f, "0000");
-        } else if self.data == 65 {
+        if self.data == 0 || self.data == 65 {
             return write!(f, "0000");
         }
 

@@ -55,4 +55,3 @@ pub const VALUE_ZERO: i16 = 0;
 pub const VALUE_DRAW: i16 = VALUE_ZERO;
 pub const VALUE_MATE: i16 = 32000;
 pub const VALUE_INFINITE: i16 = 32001;
-pub const VALUE_NONE: i16 = 32002;

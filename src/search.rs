@@ -117,7 +117,7 @@ impl Search {
                 moves.clone()
             } else {
                 // Sort by score (descending) - best moves first
-                move_scores.sort_by(|a, b| b.1.cmp(&a.1));
+                move_scores.sort_by_key(|k| std::cmp::Reverse(k.1));
                 let sorted: Vec<Move> = move_scores.iter().map(|(mv, _)| *mv).collect();
                 // Clear move scores for this iteration
                 move_scores.clear();
@@ -172,13 +172,13 @@ impl Search {
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             if entry.depth >= depth {
                 match entry.node_type {
-                    NodeType::EXACT => return Some(entry.value),
-                    NodeType::LOWERBOUND => {
+                    NodeType::Exact => return Some(entry.value),
+                    NodeType::LowerBound => {
                         if entry.value >= beta {
                             return Some(entry.value);
                         }
                     }
-                    NodeType::UPPERBOUND => {
+                    NodeType::UpperBound => {
                         if entry.value <= alpha {
                             return Some(entry.value);
                         }
@@ -221,7 +221,7 @@ impl Search {
                                 depth,
                                 value: beta,
                                 best_move: mv,
-                                node_type: NodeType::LOWERBOUND,
+                                node_type: NodeType::LowerBound,
                             },
                         );
                         return Some(beta);
@@ -239,9 +239,9 @@ impl Search {
 
         // Store in TT
         let node_type = if alpha > original_alpha {
-            NodeType::EXACT
+            NodeType::Exact
         } else {
-            NodeType::UPPERBOUND
+            NodeType::UpperBound
         };
         self.eval.transposition_table.store(
             zobrist,

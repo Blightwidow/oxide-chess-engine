@@ -142,7 +142,7 @@ impl Bitboards {
         }
     }
 
-    pub fn init_magics(piece_type: Piece, magics: &mut [Magic; NrOf::SQUARES], table: &mut Vec<Bitboard>) {
+    pub fn init_magics(piece_type: Piece, magics: &mut [Magic; NrOf::SQUARES], table: &mut [Bitboard]) {
         assert!(
             piece_type == PieceType::ROOK || piece_type == PieceType::BISHOP,
             "Invalid piece."

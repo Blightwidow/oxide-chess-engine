@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use crate::{
     bitboards::Bitboards, evaluate::Eval, hash::Hasher, movegen::Movegen, position::Position, search::Search,
-    uci::UCI,
+    uci::Uci,
 };
 
 fn main() {
@@ -27,5 +27,5 @@ fn main() {
     let eval = Eval::new();
     let mut search = Search::new(position, movegen, eval);
 
-    UCI::main_loop(&mut search);
+    Uci::main_loop(&mut search);
 }

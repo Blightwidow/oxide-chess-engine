@@ -10,9 +10,9 @@ use crate::{
 
 use crate::benchmark::FENS;
 
-pub struct UCI {}
+pub struct Uci {}
 
-impl UCI {
+impl Uci {
     pub fn main_loop(search: &mut Search) {
         // Handle stream
 
@@ -47,15 +47,15 @@ impl UCI {
                 search.position.set(FEN_START_POSITION.to_string());
                 search.eval.transposition_table.clear();
             } else if token == "position" {
-                UCI::position(search, &mut args);
+                Uci::position(search, &mut args);
             } else if token == "go" {
-                UCI::go(search, &mut args);
+                Uci::go(search, &mut args);
             } else if token == "setoption" {
-                UCI::option(search, &mut args);
+                Uci::option(search, &mut args);
             } else if token == "bench" {
-                UCI::bench(search);
+                Uci::bench(search);
             } else if token == "help" {
-                UCI::help();
+                Uci::help();
             } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
                 println!("Unknown command: {}. Type help for more information", token);
             }
@@ -73,7 +73,7 @@ impl UCI {
             search.position.set(FEN_START_POSITION.to_string());
 
             // Consume the next token if it is 'moves'
-            token = args.next().unwrap_or("");
+            args.next();
         } else if token == "fen" {
             let mut fen = String::new();
 
@@ -167,7 +167,7 @@ impl UCI {
                     let value = args.next().unwrap_or("");
 
                     if selected_option == "Hash" { search.eval.resize_transposition_table(
-                        value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).min(512).max(1),
+                        value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).clamp(1, 512),
                     ) }
                 }
                 _ => (),
@@ -179,12 +179,10 @@ impl UCI {
 
     fn bench(search: &mut Search) {
         let mut nodes: usize = 0;
-        let mut count: usize = 1;
         let elapsed = time::Instant::now();
 
-        for fen in FENS {
-            println!("\nPosition: {}/{}, ({})", count, FENS.len(), fen);
-            count += 1;
+        for (i, fen) in FENS.iter().enumerate() {
+            println!("\nPosition: {}/{}, ({})", i + 1, FENS.len(), fen);
             search.position.set(fen.to_string());
             search.run(SearchLimits::default());
             nodes += search.nodes_searched;
