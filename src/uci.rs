@@ -191,6 +191,7 @@ impl Uci {
 
         for (i, fen) in FENS.iter().enumerate() {
             println!("\nPosition: {}/{} ({})", i + 1, FENS.len(), fen);
+            search.eval.transposition_table.clear();
             search.position.set(fen.to_string());
             search.run(limits);
             nodes += search.nodes_searched;

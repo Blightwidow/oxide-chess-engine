@@ -18,6 +18,7 @@ use crate::{
 };
 
 use self::defs::*;
+use crate::time::defs::CHECK_INTERVAL;
 
 const MAX_PLY: usize = 128;
 const LMP_THRESHOLDS: [usize; 5] = [0, 3, 6, 10, 15];
@@ -34,6 +35,7 @@ pub struct Search {
     killers: [[Move; 2]; MAX_PLY],
     history: [[i32; 64]; 64],
     lmr_table: [[u8; 64]; 128],
+    nodes_until_check: usize,
 }
 
 impl Search {
@@ -56,6 +58,7 @@ impl Search {
             killers: [[Move::none(); 2]; MAX_PLY],
             history: [[0; 64]; 64],
             lmr_table,
+            nodes_until_check: CHECK_INTERVAL,
         };
         search.position.set(FEN_START_POSITION.to_string());
 
@@ -68,6 +71,7 @@ impl Search {
         self.start_time = time::Instant::now();
         self.killers = [[Move::none(); 2]; MAX_PLY];
         self.history = [[0; 64]; 64];
+        self.nodes_until_check = CHECK_INTERVAL;
 
         if limits.perft > 0 {
             let nodes = self.perft(limits.perft, true);
@@ -133,6 +137,15 @@ impl Search {
         nodes
     }
 
+    fn check_time(&mut self) -> bool {
+        self.nodes_until_check -= 1;
+        if self.nodes_until_check == 0 {
+            self.nodes_until_check = CHECK_INTERVAL;
+            return self.time.should_stop_hard();
+        }
+        false
+    }
+
     fn search(&mut self, max_depth: u8) -> Option<(Move, i16)> {
         let moves = self.movegen.legal_moves(&self.position);
 
@@ -145,7 +158,7 @@ impl Search {
         let mut best_score_overall: i16 = -VALUE_INFINITE;
 
         for current_depth in 1..=max_depth {
-            if self.time.should_stop() {
+            if self.time.should_stop_soft() {
                 break;
             }
 
@@ -288,7 +301,7 @@ impl Search {
         ply: usize,
         allow_null: bool,
     ) -> Option<i16> {
-        if self.time.should_stop() {
+        if self.check_time() {
             return None;
         }
         self.nodes_searched += 1;
@@ -542,7 +555,7 @@ impl Search {
     }
 
     fn quiescence(&mut self, mut alpha: i16, beta: i16, ply: usize) -> Option<i16> {
-        if self.time.should_stop() {
+        if self.check_time() {
             return None;
         }
         self.nodes_searched += 1;

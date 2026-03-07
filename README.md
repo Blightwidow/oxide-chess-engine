@@ -39,10 +39,10 @@ cargo clippy                # Lint
 cargo build -r --target-dir=base   # Build baseline
 # Make changes...
 cargo build -r                     # Build new version
-fastchess \
-    -engine cmd=./base/release/chessbot name="The new engine" \
-    -engine cmd=./target/release/chessbot name="The old engine" \
-    -pgnout file="games.pgn" \
+./bin/fastchess \
+    -engine cmd=./target/release/chessbot name="vX.X.X" \
+    -engine cmd=./base/release/chessbot name="vX.X.X" \
+    -pgnout file="games/vX.X.X.pgn" \
     -openings file=8moves_v3.pgn format=pgn order=random \
     -each tc=8+0.08 \
     -rounds 5000 -repeat \
