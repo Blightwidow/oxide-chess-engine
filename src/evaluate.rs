@@ -1,5 +1,5 @@
 pub mod defs;
-mod tables;
+pub mod tables;
 pub mod transposition;
 
 use crate::{defs::*, position::Position, search::defs::VALUE_INFINITE};

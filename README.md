@@ -38,13 +38,18 @@ cargo build -r
 
 ### Search
 
-- Negamax
+- Negamax with alpha-beta pruning
 - Iterative deepening
+- Transposition table with best move, depth, and node type
+- Quiescence search (captures, en passant, promotions)
+- Check extensions
+- Move ordering: TT move → MVV-LVA captures → killer moves → quiet moves
+- Incremental selection sort (avoids sorting moves beyond beta cutoffs)
 
 ### Evaluation
 
 - Centipawn scaling
-- Tapered piece square table
+- Tapered piece square table (middlegame/endgame interpolation)
 
 ## Acknowledgements
 

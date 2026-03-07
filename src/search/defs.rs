@@ -21,7 +21,7 @@ impl SearchLimits {
     pub fn default() -> SearchLimits {
         SearchLimits {
             perft: 0,
-            depth: 12,
+            depth: 128,
             ponder: false,
             white_time: u64::MAX,
             black_time: u64::MAX,
