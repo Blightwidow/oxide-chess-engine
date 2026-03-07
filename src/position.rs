@@ -160,9 +160,10 @@ impl Position {
 
         self.side_to_move = them;
         new_state.captured_piece = captured;
-        new_state.rule50 = match captured == PieceType::NONE {
-            true => new_state.rule50 + 1,
-            false => 0,
+        new_state.rule50 = if captured != PieceType::NONE || type_of_piece(piece) == PieceType::PAWN {
+            0
+        } else {
+            new_state.rule50 + 1
         };
         new_state.game_ply += 1;
         self.states.push(new_state);

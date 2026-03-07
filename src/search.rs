@@ -296,6 +296,11 @@ impl Search {
             self.seldepth = ply;
         }
 
+        // 50-move rule
+        if self.position.states.last().unwrap().rule50 >= 100 {
+            return Some(VALUE_DRAW);
+        }
+
         // TT probe
         let zobrist = self.position.zobrist;
         let mut tt_move = Move::none();

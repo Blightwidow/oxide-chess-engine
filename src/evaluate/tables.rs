@@ -4,6 +4,22 @@ pub const GAME_PHASE_INCREMENT: [i16; NrOf::PIECE_TYPES] = [0, 0, 1, 1, 2, 4, 0]
 pub const PIECE_VALUES_MG: [i16; NrOf::PIECE_TYPES] = [0, 82, 337, 365, 477, 1025, 0];
 pub const PIECE_VALUES_EG: [i16; NrOf::PIECE_TYPES] = [0, 94, 281, 297, 512, 936, 0];
 
+pub const DOUBLED_PAWN_MG: i16 = -11;
+pub const DOUBLED_PAWN_EG: i16 = -51;
+pub const ISOLATED_PAWN_MG: i16 = -5;
+pub const ISOLATED_PAWN_EG: i16 = -15;
+pub const BISHOP_PAIR_MG: i16 = 30;
+pub const BISHOP_PAIR_EG: i16 = 50;
+pub const ROOK_OPEN_FILE_MG: i16 = 25;
+pub const ROOK_OPEN_FILE_EG: i16 = 10;
+pub const ROOK_SEMI_OPEN_FILE_MG: i16 = 10;
+pub const ROOK_SEMI_OPEN_FILE_EG: i16 = 7;
+
+#[rustfmt::skip]
+pub const PASSED_PAWN_MG: [i16; 8] = [0, 5, 10, 20, 40, 60, 100, 0];
+#[rustfmt::skip]
+pub const PASSED_PAWN_EG: [i16; 8] = [0, 7, 16, 34, 72, 128, 192, 0];
+
 pub const PIECE_SQUARE_MG_TABLES: [[i16; NrOf::SQUARES]; NrOf::PIECE_TYPES] = [
     [0; NrOf::SQUARES],
     PAWN_MG_TABLE,
