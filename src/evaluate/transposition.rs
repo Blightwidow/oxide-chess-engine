@@ -73,6 +73,12 @@ impl TranspositionTable {
         }
     }
 
+    pub fn hashfull(&self) -> usize {
+        let sample = self.entries.len().min(1000);
+        let used = self.entries[..sample].iter().filter(|e| e.key != 0).count();
+        used * 1000 / sample
+    }
+
     pub fn probe(&self, key: u64) -> Option<&HashData> {
         let index = key % self.size as u64;
         let entry = &self.entries[index as usize];

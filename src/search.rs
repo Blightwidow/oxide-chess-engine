@@ -1,6 +1,8 @@
 pub mod defs;
 mod test;
 
+use std::time;
+
 use crate::{
     evaluate::{
         tables::PIECE_VALUES_MG,
@@ -22,7 +24,9 @@ pub struct Search {
     pub movegen: Movegen,
     pub eval: Eval,
     pub nodes_searched: usize,
+    seldepth: usize,
     time: TimeManager,
+    start_time: time::Instant,
     killers: [[Move; 2]; MAX_PLY],
     history: [[i32; 64]; 64],
     lmr_table: [[u8; 64]; 128],
@@ -41,8 +45,10 @@ impl Search {
             position,
             movegen,
             nodes_searched: 0,
+            seldepth: 0,
             eval,
             time: TimeManager::default(),
+            start_time: time::Instant::now(),
             killers: [[Move::none(); 2]; MAX_PLY],
             history: [[0; 64]; 64],
             lmr_table,
@@ -54,6 +60,8 @@ impl Search {
 
     pub fn run(&mut self, limits: SearchLimits) {
         self.nodes_searched = 0;
+        self.seldepth = 0;
+        self.start_time = time::Instant::now();
         self.killers = [[Move::none(); 2]; MAX_PLY];
         self.history = [[0; 64]; 64];
 
@@ -72,7 +80,18 @@ impl Search {
         if limits.depth > 0 {
             let result = self.search(limits.depth);
             if let Some((mv, _score)) = result {
-                println!("bestmove {:?}", mv);
+                // Probe TT for ponder move
+                self.position.do_move(mv);
+                let ponder = self.eval.transposition_table.probe(self.position.zobrist)
+                    .map(|entry| entry.best_move)
+                    .filter(|m| *m != Move::none());
+                self.position.undo_move(mv);
+
+                if let Some(ponder_mv) = ponder {
+                    println!("bestmove {:?} ponder {:?}", mv, ponder_mv);
+                } else {
+                    println!("bestmove {:?}", mv);
+                }
             } else {
                 println!("bestmove 0000");
             }
@@ -126,6 +145,7 @@ impl Search {
                 break;
             }
 
+            self.seldepth = 0;
             let mut best_score;
             let mut current_best_move: Option<Move>;
 
@@ -202,9 +222,12 @@ impl Search {
             if let Some(mv) = current_best_move {
                 best_move = Some(mv);
                 best_score_overall = best_score;
+                let elapsed_ms = self.start_time.elapsed().as_millis().max(1) as usize;
+                let nps = self.nodes_searched * 1000 / elapsed_ms;
+                let hashfull = self.eval.transposition_table.hashfull();
                 println!(
-                    "info depth {} score cp {} nodes {} pv {:?}",
-                    current_depth, best_score, self.nodes_searched, mv
+                    "info depth {} seldepth {} multipv 1 score cp {} nodes {} nps {} hashfull {} tbhits 0 time {} pv {:?}",
+                    current_depth, self.seldepth, best_score, self.nodes_searched, nps, hashfull, elapsed_ms, mv
                 );
             }
         }
@@ -265,6 +288,9 @@ impl Search {
             return None;
         }
         self.nodes_searched += 1;
+        if ply > self.seldepth {
+            self.seldepth = ply;
+        }
 
         // TT probe
         let zobrist = self.position.zobrist;
@@ -464,6 +490,9 @@ impl Search {
             return None;
         }
         self.nodes_searched += 1;
+        if ply > self.seldepth {
+            self.seldepth = ply;
+        }
 
         // Stand pat
         let stand_pat = self.eval.evaluate(&self.position);

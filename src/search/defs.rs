@@ -1,4 +1,7 @@
-use crate::defs::{Side, Sides};
+use crate::{
+    defs::{Side, Sides},
+    evaluate::defs::DEFAULT_HASH_SIZE,
+};
 
 pub const FEN_START_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -15,6 +18,8 @@ pub struct SearchLimits {
     pub nodes: usize,
     pub mate: usize,
     pub movetime: usize,
+    pub hash_size: usize,
+    pub threads: usize,
 }
 
 impl SearchLimits {
@@ -31,6 +36,8 @@ impl SearchLimits {
             nodes: usize::MAX,
             mate: 0,
             movetime: usize::MAX,
+            hash_size: DEFAULT_HASH_SIZE,
+            threads: 1,
         }
     }
 

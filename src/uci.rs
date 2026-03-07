@@ -55,7 +55,7 @@ impl Uci {
             } else if token == "setoption" {
                 Uci::option(search, &mut args);
             } else if token == "bench" {
-                Uci::bench(search);
+                Uci::bench(search, &mut args);
             } else if token == "help" {
                 Uci::help();
             } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
@@ -179,14 +179,20 @@ impl Uci {
         }
     }
 
-    fn bench(search: &mut Search) {
+    fn bench(search: &mut Search, args: &mut std::str::SplitWhitespace<'_>) {
         let mut nodes: usize = 0;
         let elapsed = time::Instant::now();
 
+        let mut limits = SearchLimits::default();
+
+        limits.hash_size = args.next().unwrap_or("16").parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE);
+        limits.threads = args.next().unwrap_or("1").parse::<usize>().unwrap_or(1);
+        limits.depth = args.next().unwrap_or("13").parse::<u8>().unwrap_or(13);
+
         for (i, fen) in FENS.iter().enumerate() {
-            println!("\nPosition: {}/{}, ({})", i + 1, FENS.len(), fen);
+            println!("\nPosition: {}/{} ({})", i + 1, FENS.len(), fen);
             search.position.set(fen.to_string());
-            search.run(SearchLimits::default());
+            search.run(limits);
             nodes += search.nodes_searched;
         }
 

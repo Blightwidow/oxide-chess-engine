@@ -1,1 +1,1 @@
-pub const DEFAULT_HASH_SIZE: usize = 128;
+pub const DEFAULT_HASH_SIZE: usize = 16;
