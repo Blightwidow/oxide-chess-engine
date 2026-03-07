@@ -63,11 +63,11 @@ impl Search {
         }
     }
 
-    fn perft(&mut self, depth: u8, root: bool) -> u128 {
-        let mut count: u128;
-        let mut nodes: u128 = 0;
+    fn perft(&mut self, depth: u8, root: bool) -> u64 {
+        let mut count: u64;
+        let mut nodes: u64 = 0;
         let leaf: bool = depth == 2;
-        let moves: Vec<Move> = self.movegen.legal_moves(&self.position);
+        let moves = self.movegen.legal_moves(&self.position);
 
         for mv in moves.iter() {
             if depth <= 1 {
@@ -76,7 +76,7 @@ impl Search {
             } else {
                 self.position.do_move(*mv);
                 count = match leaf {
-                    true => self.movegen.legal_moves(&self.position).len() as u128,
+                    true => self.movegen.legal_moves(&self.position).len() as u64,
                     false => self.perft(depth - 1, false),
                 };
                 nodes += count;
@@ -114,7 +114,7 @@ impl Search {
             // Sort moves by score from previous iteration (best moves first)
             let sorted_moves: Vec<Move> = if move_scores.is_empty() {
                 // First iteration: no previous scores, use all moves as-is
-                moves.clone()
+                moves.to_vec()
             } else {
                 // Sort by score (descending) - best moves first
                 move_scores.sort_by_key(|k| std::cmp::Reverse(k.1));
@@ -195,8 +195,8 @@ impl Search {
 
         // Check for terminal positions
         if moves.is_empty() {
-            let checkers = self.position.checkers(self.position.side_to_move);
-            if !checkers.is_empty() {
+            let checkers = self.position.checkers_bb(self.position.side_to_move);
+            if checkers != 0 {
                 return Some(-VALUE_MATE + (depth as i16));
             } else {
                 return Some(VALUE_DRAW);

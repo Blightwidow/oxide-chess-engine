@@ -11,6 +11,7 @@ pub struct Entry {
     data: HashData,
 }
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 pub struct HashData {
     pub depth: u8,
     pub value: i16,
@@ -24,16 +25,16 @@ impl HashData {
             depth: 0,
             value: 0,
             best_move: Move::none(),
-            node_type: NodeType::EXACT,
+            node_type: NodeType::Exact,
         }
     }
 }
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum NodeType {
-    EXACT,
-    LOWERBOUND,
-    UPPERBOUND,
+    Exact,
+    LowerBound,
+    UpperBound,
 }
 
 impl TranspositionTable {

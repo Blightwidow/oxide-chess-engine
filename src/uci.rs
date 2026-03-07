@@ -49,6 +49,8 @@ impl Uci {
             } else if token == "position" {
                 Uci::position(search, &mut args);
             } else if token == "go" {
+                // TODO: Update once multithreading is implemented
+                println!("info string Using 1 thread");
                 Uci::go(search, &mut args);
             } else if token == "setoption" {
                 Uci::option(search, &mut args);

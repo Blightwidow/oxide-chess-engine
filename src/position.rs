@@ -96,6 +96,7 @@ impl Position {
         new_state.castling_rights &= !self.castling_masks[from];
         new_state.castling_rights &= !self.castling_masks[to];
 
+        new_state.pinned_bb = [self.pinned_bb[0], self.pinned_bb[1]];
         for side in [us, them] {
             self.pinned_bb[side] = self.pinned_bb(side);
         }
@@ -173,7 +174,6 @@ impl Position {
 
         self.side_to_move ^= 1;
         let us: Side = self.side_to_move;
-        let them: Side = self.side_to_move ^ 1;
         let from: Square = mv.from_sq();
         let to: Square = mv.to_sq();
         let mut piece: Piece = self.piece_on(to);
@@ -216,9 +216,8 @@ impl Position {
             }
         }
 
-        for side in [them, us] {
-            self.pinned_bb[side] = self.pinned_bb(side);
-        }
+        self.pinned_bb[0] = last_state.pinned_bb[0];
+        self.pinned_bb[1] = last_state.pinned_bb[1];
     }
 
     pub fn piece_on(&self, square: Square) -> Piece {
@@ -322,39 +321,41 @@ impl Position {
         self.states = vec![StateInfo::new()];
     }
 
-    pub fn checkers(&self, defending_side: Side) -> Vec<Square> {
+    pub fn checkers_bb(&self, defending_side: Side) -> Bitboard {
         #[cfg(debug_assertions)]
         assert!(defending_side == Sides::WHITE || defending_side == Sides::BLACK);
 
-        let mut checkers: Vec<Square> = Vec::new();
-        let mut attackers_bb: Bitboard = self.by_color_bb[defending_side ^ 1];
-        let kind_bb: Bitboard = self.by_type_bb[defending_side][PieceType::KING];
+        let them = defending_side ^ 1;
+        let ksq = bits::lsb(self.by_type_bb[defending_side][PieceType::KING]);
+        let occupied = self.by_color_bb[Sides::BOTH];
 
-        while attackers_bb != EMPTY {
-            let square: Square = bits::pop(&mut attackers_bb);
-            let attack_bb: Bitboard =
-                self.bitboards
-                    .attack_bb(self.piece_on(square), square, self.by_color_bb[Sides::BOTH]);
-
-            if attack_bb & kind_bb != EMPTY {
-                checkers.push(square);
-            }
-        }
-
-        checkers
+        (self.bitboards.attack_bb(make_piece(defending_side, PieceType::KNIGHT), ksq, occupied)
+            & self.by_type_bb[them][PieceType::KNIGHT])
+            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::BISHOP), ksq, occupied)
+                & (self.by_type_bb[them][PieceType::BISHOP] | self.by_type_bb[them][PieceType::QUEEN]))
+            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::ROOK), ksq, occupied)
+                & (self.by_type_bb[them][PieceType::ROOK] | self.by_type_bb[them][PieceType::QUEEN]))
+            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::PAWN), ksq, EMPTY)
+                & self.by_type_bb[them][PieceType::PAWN])
     }
 
-    fn attacks_bb(&self, side: Side, occupied: Bitboard) -> Bitboard {
-        let mut attacks_bb: Bitboard = EMPTY;
-        let mut opponents: Bitboard = self.by_color_bb[side] & occupied;
-
-        while opponents != EMPTY {
-            let square: Square = bits::pop(&mut opponents);
-
-            attacks_bb |= self.bitboards.attack_bb(self.piece_on(square), square, occupied);
-        }
-
-        attacks_bb
+    pub fn is_square_attacked(&self, sq: Square, by_side: Side, occupied: Bitboard) -> bool {
+        let bb = &self.by_type_bb[by_side];
+        let them = occupied & self.by_color_bb[by_side];
+        (self.bitboards.attack_bb(make_piece(by_side ^ 1, PieceType::PAWN), sq, EMPTY) & bb[PieceType::PAWN] & them
+            != EMPTY)
+            || (self.bitboards.attack_bb(make_piece(0, PieceType::KNIGHT), sq, occupied) & bb[PieceType::KNIGHT] & them
+                != EMPTY)
+            || (self.bitboards.attack_bb(make_piece(0, PieceType::BISHOP), sq, occupied)
+                & (bb[PieceType::BISHOP] | bb[PieceType::QUEEN])
+                & them
+                != EMPTY)
+            || (self.bitboards.attack_bb(make_piece(0, PieceType::ROOK), sq, occupied)
+                & (bb[PieceType::ROOK] | bb[PieceType::QUEEN])
+                & them
+                != EMPTY)
+            || (self.bitboards.attack_bb(make_piece(0, PieceType::KING), sq, occupied) & bb[PieceType::KING] & them
+                != EMPTY)
     }
 
     fn pinned_bb(&self, side: Side) -> Bitboard {
@@ -411,18 +412,26 @@ impl Position {
                 assert!(self.piece_on(from) == make_piece(us, PieceType::PAWN));
             }
 
-            return self.attacks_bb(them, occupied) & self.by_type_bb[us][PieceType::KING] == EMPTY;
+            let ksq = bits::lsb(self.by_type_bb[us][PieceType::KING]);
+            return !self.is_square_attacked(ksq, them, occupied);
         }
 
         // Castling moves generation does not check if the castling path is clear of
         // enemy attacks, it is delayed at a later time: now!
         if move_type == MoveTypes::CASTLING {
             let between_bb = self.bitboards.between_bb[from][to];
+            let occupied = self.by_color_bb[Sides::BOTH];
 
-            if between_bb & CASTLING_DESTINATION_BB & self.attacks_bb(them, self.by_color_bb[Sides::BOTH]) != EMPTY
-                || between_bb & self.by_color_bb[Sides::BOTH] != EMPTY
-            {
+            if between_bb & occupied != EMPTY {
                 return false;
+            }
+
+            let mut path = between_bb & CASTLING_DESTINATION_BB;
+            while path != EMPTY {
+                let sq = bits::pop(&mut path);
+                if self.is_square_attacked(sq, them, occupied) {
+                    return false;
+                }
             }
 
             return true;
@@ -431,7 +440,7 @@ impl Position {
         // If the moving piece is a king, check whether the destination square is
         // attacked by the opponent.
         if type_of_piece(piece) == PieceType::KING {
-            return (self.attacks_bb(them, self.by_color_bb[Sides::BOTH] ^ square_bb(from))) & square_bb(to) == EMPTY;
+            return !self.is_square_attacked(to, them, self.by_color_bb[Sides::BOTH] ^ square_bb(from));
         }
 
         // A non-king move is legal if and only if it is not pinned or it

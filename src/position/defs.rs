@@ -1,4 +1,8 @@
-use crate::{defs::*, movegen::defs::CastlingRights};
+use crate::{
+    bitboards::defs::EMPTY,
+    defs::*,
+    movegen::defs::CastlingRights,
+};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct StateInfo {
@@ -9,6 +13,7 @@ pub struct StateInfo {
     pub rule50: usize,
     pub game_ply: usize,
     pub zobrist: u64,
+    pub pinned_bb: [Bitboard; 2],
 }
 
 impl StateInfo {
@@ -20,6 +25,7 @@ impl StateInfo {
             rule50: 0,
             game_ply: 0,
             zobrist: 0,
+            pinned_bb: [EMPTY; 2],
         }
     }
 }

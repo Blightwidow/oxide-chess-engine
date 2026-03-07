@@ -2,6 +2,8 @@ pub mod defs;
 
 use std::rc::Rc;
 
+use arrayvec::ArrayVec;
+
 use crate::{
     bitboards::{defs::*, Bitboards},
     defs::*,
@@ -10,6 +12,8 @@ use crate::{
 };
 
 use self::defs::*;
+
+pub type MoveList = ArrayVec<Move, 256>;
 
 pub struct Movegen {
     bitboards: Rc<Bitboards>,
@@ -20,31 +24,35 @@ impl Movegen {
         Self { bitboards }
     }
 
-    pub fn legal_moves(&self, position: &Position) -> Vec<Move> {
+    pub fn legal_moves(&self, position: &Position) -> MoveList {
         let us = position.side_to_move;
         let king_square: Square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
 
         let mut movelist = self.generate(position, us);
-        movelist.retain(|&mv| {
+        movelist.retain(|mv| {
             (position.pinned_bb[us] & square_bb(mv.from_sq()) == EMPTY
                 && king_square != mv.from_sq()
                 && mv.type_of() != MoveTypes::EN_PASSANT)
-                || position.legal(mv)
+                || position.legal(*mv)
         });
 
         movelist
     }
 
-    fn generate(&self, position: &Position, us: Side) -> Vec<Move> {
-        let mut movelist: Vec<Move> = Vec::with_capacity(256);
-        let checkers = position.checkers(us);
+    fn generate(&self, position: &Position, us: Side) -> MoveList {
+        let mut movelist: MoveList = ArrayVec::new();
+        let checkers = position.checkers_bb(us);
         let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
-        let target_bb: Bitboard = match checkers.len() {
-            1 => self.bitboards.between_bb[king_square][checkers[0]] | square_bb(checkers[0]),
+        let num_checkers = checkers.count_ones();
+        let target_bb: Bitboard = match num_checkers {
+            1 => {
+                let checker_sq = bits::lsb(checkers);
+                self.bitboards.between_bb[king_square][checker_sq] | square_bb(checker_sq)
+            }
             _ => FULL,
         };
 
-        if checkers.len() <= 1 {
+        if num_checkers <= 1 {
             self.generate_pawns(position, &mut movelist, us, target_bb);
             self.generate_piece(position, &mut movelist, PieceType::KNIGHT, us, target_bb);
             self.generate_piece(position, &mut movelist, PieceType::BISHOP, us, target_bb);
@@ -54,14 +62,14 @@ impl Movegen {
 
         self.generate_piece(position, &mut movelist, PieceType::KING, us, FULL);
 
-        if checkers.is_empty() {
+        if checkers == EMPTY {
             self.generate_castling(position, &mut movelist, us);
         }
 
         movelist
     }
 
-    fn generate_pawns(&self, position: &Position, movelist: &mut Vec<Move>, us: Side, target_bb: Bitboard) {
+    fn generate_pawns(&self, position: &Position, movelist: &mut MoveList, us: Side, target_bb: Bitboard) {
         let them: Side = us ^ 1;
         let up: Direction = match us {
             Sides::WHITE => Directions::UP,
@@ -172,7 +180,7 @@ impl Movegen {
     fn generate_piece(
         &self,
         position: &Position,
-        movelist: &mut Vec<Move>,
+        movelist: &mut MoveList,
         piece: Piece,
         us: Side,
         target_bb: Bitboard,
@@ -199,7 +207,7 @@ impl Movegen {
         }
     }
 
-    fn generate_castling(&self, position: &Position, movelist: &mut Vec<Move>, us: Side) {
+    fn generate_castling(&self, position: &Position, movelist: &mut MoveList, us: Side) {
         let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
         let mut rights = position.castling_masks[king_square] & position.states.last().unwrap().castling_rights;
 
