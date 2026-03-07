@@ -20,9 +20,15 @@ use crate::{
 use self::defs::*;
 use crate::time::defs::CHECK_INTERVAL;
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const MAX_PLY: usize = 128;
+/// Late Move Pruning: max quiet moves to search at depths 1-4
 const LMP_THRESHOLDS: [usize; 5] = [0, 3, 6, 10, 15];
+/// Piece values used by Static Exchange Evaluation (SEE)
 const SEE_VALUES: [i16; 7] = [0, 100, 300, 300, 500, 900, 20000];
+
+// ─── Search State ────────────────────────────────────────────────────────────
 
 pub struct Search {
     pub position: Position,
@@ -32,14 +38,20 @@ pub struct Search {
     seldepth: usize,
     time: TimeManager,
     start_time: time::Instant,
+    /// Two killer moves per ply — quiet moves that caused beta cutoffs
     killers: [[Move; 2]; MAX_PLY],
+    /// History heuristic table [from_sq][to_sq] — accumulated depth² bonus for quiet beta cutoffs
     history: [[i32; 64]; 64],
+    /// Late Move Reduction table [depth][move_number] — precomputed ln(d)*ln(m)/2 reductions
     lmr_table: [[u8; 64]; 128],
+    /// Countdown until next time check (avoids calling Instant::now() every node)
     nodes_until_check: usize,
 }
 
 impl Search {
+    /// Initialize search with precomputed LMR table.
     pub fn new(position: Position, movegen: Movegen, eval: Eval) -> Self {
+        // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2
         let mut lmr_table = [[0u8; 64]; 128];
         for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
             for (move_num, entry) in row.iter_mut().enumerate().skip(1) {
@@ -65,7 +77,9 @@ impl Search {
         search
     }
 
+    /// Entry point: reset state, run iterative deepening, and print bestmove.
     pub fn run(&mut self, limits: SearchLimits) {
+        // Reset per-search state
         self.nodes_searched = 0;
         self.seldepth = 0;
         self.start_time = time::Instant::now();
@@ -109,6 +123,9 @@ impl Search {
         }
     }
 
+    // ─── Perft ────────────────────────────────────────────────────────────────
+
+    /// Performance test: count leaf nodes at a given depth. Used for move generation correctness.
     fn perft(&mut self, depth: u8, root: bool) -> u64 {
         let mut count: u64;
         let mut nodes: u64 = 0;
@@ -137,6 +154,10 @@ impl Search {
         nodes
     }
 
+    // ─── Time Management ──────────────────────────────────────────────────────
+
+    /// Periodically check if we've exceeded the hard time limit.
+    /// Returns true if search should abort immediately.
     fn check_time(&mut self) -> bool {
         self.nodes_until_check -= 1;
         if self.nodes_until_check == 0 {
@@ -146,6 +167,12 @@ impl Search {
         false
     }
 
+    // ─── Iterative Deepening ───────────────────────────────────────────────────
+
+    /// Iterative deepening loop with aspiration windows.
+    /// Searches depth 1, 2, ..., max_depth. At each depth, sorts root moves by
+    /// previous iteration scores and uses a narrow aspiration window (±25 cp)
+    /// starting at depth 4, widening on fail-high/fail-low.
     fn search(&mut self, max_depth: u8) -> Option<(Move, i16)> {
         let moves = self.movegen.legal_moves(&self.position);
 
@@ -252,6 +279,11 @@ impl Search {
         best_move.map(|mv| (mv, best_score_overall))
     }
 
+    // ─── Move Ordering ────────────────────────────────────────────────────────
+
+    /// Assign a score to a move for ordering. Higher = searched first.
+    /// Priority: TT move (1M) > captures via MVV-LVA (100K+) > promotions (100K+)
+    ///         > killer #1 (90K) > killer #2 (80K) > history heuristic.
     fn score_move(&self, mv: Move, tt_move: Move, ply: usize) -> i32 {
         // TT move gets highest priority
         if mv == tt_move && tt_move != Move::none() {
@@ -293,6 +325,22 @@ impl Search {
         self.history[from_sq][to_sq]
     }
 
+    // ─── Alpha-Beta Search ────────────────────────────────────────────────────
+
+    /// Main alpha-beta search with PVS, null move pruning, and various forward pruning.
+    ///
+    /// Returns `Some(score)` or `None` if time expired.
+    ///
+    /// Flow:
+    ///   1. Time check, draw detection, TT probe
+    ///   2. Check extension (+1 depth if in check)
+    ///   3. Pre-move pruning (null move, RFP, razoring) — skipped in PV nodes & check
+    ///   4. Move loop with incremental sort:
+    ///      - Per-move pruning (futility, LMP, SEE)
+    ///      - PVS: first move full window, rest null-window + re-search if needed
+    ///      - LMR: reduce quiet late moves, re-search at full depth on fail-high
+    ///   5. Beta cutoff → update killers/history, store TT as LowerBound
+    ///   6. After loop → store TT as Exact (alpha improved) or UpperBound
     fn alpha_beta(
         &mut self,
         depth: u8,
@@ -344,14 +392,17 @@ impl Search {
             return self.quiescence(alpha, beta, ply);
         }
 
-        // Null Move Pruning
+        // Null Move Pruning (NMP)
+        // Skip our turn and search with reduced depth. If opponent can't beat beta
+        // even with a free move, the position is likely too good to need full search.
+        // Disabled in check, at shallow depth, and in zugzwang-prone positions (no pieces).
         if allow_null && !in_check && search_depth >= 3 {
             let us = self.position.side_to_move;
             let non_pawn_material = self.position.by_color_bb[us]
                 & !self.position.by_type_bb[us][PieceType::PAWN]
                 & !self.position.by_type_bb[us][PieceType::KING];
             if non_pawn_material != 0 {
-                let r = 3 + (search_depth as usize / 4);
+                let r = 3 + (search_depth as usize / 4); // adaptive reduction: R = 3 + depth/4
                 let reduced_depth = search_depth.saturating_sub(r as u8);
 
                 self.position.do_null_move();
@@ -373,6 +424,8 @@ impl Search {
         let is_pv = (beta as i32) - (alpha as i32) > 1;
 
         // Reverse Futility Pruning (RFP)
+        // If static eval is far above beta (by 80*depth cp), assume no move will
+        // drop the score below beta. Safe to prune the whole subtree.
         if !is_pv && !in_check && search_depth <= 7 && static_eval.abs() < VALUE_MATE - 100 {
             let rfp_margin = 80 * (search_depth as i16);
             if static_eval - rfp_margin >= beta {
@@ -381,6 +434,8 @@ impl Search {
         }
 
         // Razoring
+        // If static eval is far below alpha, the position is likely bad. Verify with
+        // quiescence search — if qsearch confirms, prune early.
         if !is_pv && !in_check && search_depth <= 2 && static_eval.abs() < VALUE_MATE - 100 {
             let razor_margin = if search_depth == 1 { 300_i16 } else { 600_i16 };
             if static_eval + razor_margin <= alpha {
@@ -411,9 +466,10 @@ impl Search {
         let mut best_move = Move::none();
         let mut best_score = -VALUE_INFINITE;
 
-        // Incremental selection sort: pick the best move each iteration
+        // ── Move Loop ─────────────────────────────────────────────────────────
+        // Incremental selection sort: pick the highest-scored move each iteration
+        // (cheaper than full sort since beta cutoffs prune most moves).
         for (moves_searched, i) in (0..scored_moves.len()).enumerate() {
-            // Find the best-scored move from i..end
             let mut best_idx = i;
             for j in (i + 1)..scored_moves.len() {
                 if scored_moves[j].1 > scored_moves[best_idx].1 {
@@ -434,7 +490,8 @@ impl Search {
             let is_killer = move_score == 90_000 || move_score == 80_000;
             let is_quiet = !is_capture && !is_promotion;
 
-            // Futility Pruning
+            // Futility Pruning: at low depth, skip quiet moves when static eval + margin
+            // can't reach alpha (the move won't improve the situation enough).
             if !is_pv && !in_check && is_quiet && !is_killer && moves_searched > 0 && search_depth <= 2 {
                 let futility_margin = if search_depth == 1 { 200_i16 } else { 400_i16 };
                 if static_eval + futility_margin <= alpha {
@@ -442,7 +499,8 @@ impl Search {
                 }
             }
 
-            // Late Move Pruning (LMP)
+            // Late Move Pruning (LMP): at low depth, skip quiet moves beyond a threshold.
+            // Moves are ordered by score, so late moves are unlikely to be good.
             if !is_pv && !in_check && is_quiet && !is_killer
                 && search_depth <= 4
                 && moves_searched >= LMP_THRESHOLDS[search_depth as usize]
@@ -450,20 +508,21 @@ impl Search {
                 continue;
             }
 
-            // SEE pruning for captures
+            // SEE Pruning: skip captures that lose material (e.g. QxP when P is defended).
             if !is_pv && !in_check && is_capture && moves_searched > 0 && search_depth <= 3 && self.see(mv) < 0 {
                 continue;
             }
 
             self.position.do_move(mv);
 
+            // ── PVS + LMR Search Logic ────────────────────────────────────────
             let score;
             if moves_searched == 0 {
-                // First move: full window search
+                // First move (expected best): search with full alpha-beta window
                 score = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
             } else {
-
-                // LMR conditions
+                // Late Move Reductions (LMR): reduce quiet late moves by a logarithmic
+                // amount. If the reduced search fails high, re-search at full depth.
                 let do_lmr = !in_check && !is_capture && !is_promotion && !is_killer
                     && moves_searched >= 3 && search_depth >= 3;
 
@@ -475,17 +534,18 @@ impl Search {
 
                 let reduced_depth = (search_depth - 1).saturating_sub(reduction);
 
-                // Null window search (possibly at reduced depth)
+                // Step 1: Null-window search (possibly at reduced depth for LMR)
                 let mut s = self.alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
 
-                // If LMR reduced and failed high, re-search at full depth with null window
+                // Step 2: LMR re-search — if reduced search beat alpha, try full depth
                 if let Some(val) = s {
                     if val > alpha && reduction > 0 {
                         s = self.alpha_beta(search_depth - 1, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
                     }
                 }
 
-                // PVS re-search: if null window failed high within bounds, full window
+                // Step 3: PVS re-search — if null-window beat alpha but not beta,
+                // re-search with full window to get exact score
                 if let Some(val) = s {
                     if val > alpha && val < beta {
                         s = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
@@ -504,7 +564,7 @@ impl Search {
                         best_move = mv;
                     }
                     if score >= beta {
-                        // Killer move and history: store quiet moves that cause beta cutoffs
+                        // Beta cutoff — update killer moves and history table for quiet moves
                         let is_capture = self.position.board[mv.to_sq()] != PieceType::NONE
                             || mv.type_of() == MoveTypes::EN_PASSANT;
                         if !is_capture && ply < MAX_PLY {
@@ -535,7 +595,8 @@ impl Search {
             }
         }
 
-        // Store in TT
+        // ── TT Store ──────────────────────────────────────────────────────────
+        // Exact if we improved alpha (found a PV), UpperBound (all-node) otherwise
         let node_type = if alpha > original_alpha {
             NodeType::Exact
         } else {
@@ -554,6 +615,11 @@ impl Search {
         Some(alpha)
     }
 
+    // ─── Quiescence Search ─────────────────────────────────────────────────────
+
+    /// Quiescence search: resolve tactical sequences (captures, promotions, en passant)
+    /// to avoid horizon effect. Uses stand-pat score as lower bound, then searches
+    /// only tactical moves with delta pruning and SEE pruning.
     fn quiescence(&mut self, mut alpha: i16, beta: i16, ply: usize) -> Option<i16> {
         if self.check_time() {
             return None;
@@ -563,7 +629,8 @@ impl Search {
             self.seldepth = ply;
         }
 
-        // Stand pat
+        // Stand pat: assume we can at least achieve the static eval by not capturing.
+        // If it already beats beta, prune. Otherwise use it as alpha floor.
         let stand_pat = self.eval.evaluate(&self.position);
         if stand_pat >= beta {
             return Some(beta);
@@ -602,7 +669,8 @@ impl Search {
             let mv = scored_moves[i].0;
             let move_type = mv.type_of();
 
-            // Delta Pruning
+            // Delta Pruning: skip captures where even capturing the piece + a 200cp margin
+            // can't raise the score above alpha (the capture can't possibly help).
             if move_type != MoveTypes::PROMOTION {
                 let captured_piece = if move_type == MoveTypes::EN_PASSANT {
                     PieceType::PAWN
@@ -642,6 +710,14 @@ impl Search {
         Some(alpha)
     }
 
+    // ─── Static Exchange Evaluation (SEE) ──────────────────────────────────────
+
+    /// Evaluate a capture exchange on a square by simulating all recaptures.
+    /// Returns the material gain/loss from the attacker's perspective.
+    ///
+    /// Algorithm: iteratively find the least valuable attacker for each side,
+    /// build a gain[] array, then minimax walk-back to determine if either side
+    /// can choose to stop the exchange for a better result.
     fn see(&self, mv: Move) -> i16 {
         let from = mv.from_sq();
         let to = mv.to_sq();
@@ -688,10 +764,10 @@ impl Search {
                 break;
             }
 
-            // Speculative store
+            // Speculative store: assume current attacker gets captured next
             gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
 
-            // Pruning: if the score can't improve, stop
+            // Pruning: if neither side can improve, stop early
             if (-gain[depth]).max(gain[depth - 1]) < 0 {
                 break;
             }
@@ -724,11 +800,11 @@ impl Search {
                 break;
             }
 
-            // Remove this attacker from occupied to reveal x-ray attackers
+            // Remove attacker from occupied to reveal x-ray attackers behind it
             let attacker_sq = bits::lsb(from_bb);
             occupied ^= square_bb(attacker_sq);
 
-            // Update attackers: x-ray discovery for sliding pieces
+            // Recompute sliding attackers through the now-empty square
             if attacker_piece_type == PieceType::PAWN
                 || attacker_piece_type == PieceType::BISHOP
                 || attacker_piece_type == PieceType::QUEEN
@@ -749,7 +825,7 @@ impl Search {
             side_to_move ^= 1;
         }
 
-        // Minimax walk-back
+        // Minimax walk-back: each side can choose to stop the exchange
         while depth > 1 {
             depth -= 1;
             gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
