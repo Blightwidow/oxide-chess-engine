@@ -45,7 +45,7 @@ impl Eval {
         let eg_score: i16 = eng_game[us] - eng_game[them];
         let score: i16 = match phase >= 24 {
             true => mg_score,
-            false => (mg_score * phase + eg_score * (24 - phase)) / 24,
+            false => ((mg_score as i32 * phase as i32 + eg_score as i32 * (24 - phase) as i32) / 24) as i16,
         };
 
         score.clamp(-VALUE_INFINITE, VALUE_INFINITE)

@@ -58,8 +58,8 @@ impl Search {
         );
 
         if limits.depth > 0 {
-            let best_move = self.search(limits.depth);
-            if let Some(mv) = best_move {
+            let result = self.search(limits.depth);
+            if let Some((mv, _score)) = result {
                 println!("bestmove {:?}", mv);
             } else {
                 println!("bestmove 0000");
@@ -98,7 +98,7 @@ impl Search {
         nodes
     }
 
-    fn search(&mut self, max_depth: u8) -> Option<Move> {
+    fn search(&mut self, max_depth: u8) -> Option<(Move, i16)> {
         let moves = self.movegen.legal_moves(&self.position);
 
         if moves.is_empty() {
@@ -107,6 +107,7 @@ impl Search {
 
         let mut move_scores: Vec<(Move, Option<i16>)> = Vec::new();
         let mut best_move: Option<Move> = None;
+        let mut best_score_overall: i16 = -VALUE_INFINITE;
 
         for current_depth in 1..=max_depth {
             if self.time.should_stop() {
@@ -140,6 +141,7 @@ impl Search {
                             best_score = score;
                             current_best_move = Some(mv);
                             best_move = Some(mv);
+                            best_score_overall = score;
                         }
                     }
                     None => {
@@ -156,7 +158,7 @@ impl Search {
             }
         }
 
-        best_move
+        best_move.map(|mv| (mv, best_score_overall))
     }
 
     fn score_move(&self, mv: Move, tt_move: Move, ply: usize) -> i32 {
