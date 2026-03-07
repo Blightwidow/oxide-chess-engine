@@ -23,6 +23,17 @@ cargo build -r                     # Build new version
   -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05
 ```
 
+## Documentation
+
+Detailed docs live in `docs/`. Keep them in sync when making changes:
+
+- `docs/architecture.md` — Module overview, component wiring, core types, move encoding
+- `docs/search.md` — Search algorithm, pruning, reductions, extensions, move ordering
+- `docs/evaluation.md` — Tapered eval, material values, piece-square tables
+- `docs/uci.md` — Supported UCI commands and options
+
+When adding or changing a search technique, evaluation term, or UCI command, update the corresponding doc file and the feature list in `README.md`.
+
 ## Architecture
 
 Single-threaded engine. Entry point: `src/main.rs` creates core components and runs the UCI loop.
@@ -32,15 +43,17 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 | Module | Path | Purpose |
 |--------|------|---------|
 | **uci** | `src/uci.rs` | UCI protocol handler, main input loop |
-| **search** | `src/search.rs` | Negamax with alpha-beta pruning, iterative deepening |
-| **evaluate** | `src/evaluate.rs` | Tapered eval with piece-square tables, transposition table |
-| **position** | `src/position.rs` | Board state, do/undo move |
+| **search** | `src/search.rs` | Negamax with alpha-beta, iterative deepening, pruning |
+| **evaluate** | `src/evaluate.rs` | Tapered eval with piece-square tables |
+| **evaluate/transposition** | `src/evaluate/transposition.rs` | Transposition table (hash, depth, score, best move, node type) |
+| **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
 | **movegen** | `src/movegen.rs` | Legal move generation |
 | **bitboards** | `src/bitboards.rs` | Magic bitboards, LERF mapping |
 | **time** | `src/time.rs` | Time management for search cutoff |
 | **defs** | `src/defs.rs` | Core types: `Bitboard`, `Piece`, `Side`, `Square` |
-| **hash** | `src/hash.rs` | Hasher (stub) |
-| **benchmark** | `src/benchmark.rs` | Bench positions for `bench` command |
+| **hash** | `src/hash.rs` | Zobrist key generation |
+| **benchmark** | `src/benchmark.rs` | 46-position bench suite |
+| **misc** | `src/misc.rs` | Bit manipulation utilities |
 
 ### Module Organization
 
@@ -56,6 +69,17 @@ All core types are `usize` aliases: `Bitboard = u64`, `Piece`, `Side`, `Square =
 ### Component Wiring
 
 `Bitboards` is shared via `Rc` into `Movegen` and `Position`. `Search` owns `Position`, `Movegen`, `Eval`, and `TimeManager`.
+
+## Search Techniques
+
+Current search features (see `docs/search.md` for details):
+- Negamax with alpha-beta, iterative deepening, aspiration windows, PVS
+- Null move pruning, reverse futility pruning, razoring, futility pruning
+- Late move pruning (LMP), late move reductions (LMR)
+- SEE pruning, delta pruning in quiescence
+- Check extensions
+- Move ordering: TT move > MVV-LVA captures > killer moves > history heuristic
+- Quiescence search (captures, en passant, promotions)
 
 ## Conventions
 
