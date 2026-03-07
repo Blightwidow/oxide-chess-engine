@@ -4,13 +4,15 @@ mod test;
 use std::time;
 
 use crate::{
+    bitboards::defs::EMPTY,
     evaluate::{
         tables::PIECE_VALUES_MG,
         transposition::{HashData, NodeType},
         Eval,
     },
     defs::*,
-    movegen::{defs::{Move, MoveTypes}, Movegen},
+    misc::bits,
+    movegen::{defs::{pawn_push, Move, MoveTypes}, Movegen},
     position::Position,
     time::TimeManager,
 };
@@ -18,6 +20,8 @@ use crate::{
 use self::defs::*;
 
 const MAX_PLY: usize = 128;
+const LMP_THRESHOLDS: [usize; 5] = [0, 3, 6, 10, 15];
+const SEE_VALUES: [i16; 7] = [0, 100, 300, 300, 500, 900, 20000];
 
 pub struct Search {
     pub position: Position,
@@ -346,6 +350,31 @@ impl Search {
             }
         }
 
+        // Static eval for pruning decisions
+        let static_eval = self.eval.evaluate(&self.position);
+        let is_pv = (beta as i32) - (alpha as i32) > 1;
+
+        // Reverse Futility Pruning (RFP)
+        if !is_pv && !in_check && search_depth <= 7 && static_eval.abs() < VALUE_MATE - 100 {
+            let rfp_margin = 80 * (search_depth as i16);
+            if static_eval - rfp_margin >= beta {
+                return Some(static_eval);
+            }
+        }
+
+        // Razoring
+        if !is_pv && !in_check && search_depth <= 2 && static_eval.abs() < VALUE_MATE - 100 {
+            let razor_margin = if search_depth == 1 { 300_i16 } else { 600_i16 };
+            if static_eval + razor_margin <= alpha {
+                let q_score = self.quiescence(alpha, beta, ply);
+                match q_score {
+                    Some(s) if s <= alpha => return q_score,
+                    None => return None,
+                    _ => {}
+                }
+            }
+        }
+
         let moves = self.movegen.legal_moves(&self.position);
 
         // Check for terminal positions
@@ -385,6 +414,28 @@ impl Search {
                 || move_type == MoveTypes::EN_PASSANT;
             let is_promotion = move_type == MoveTypes::PROMOTION;
             let is_killer = move_score == 90_000 || move_score == 80_000;
+            let is_quiet = !is_capture && !is_promotion;
+
+            // Futility Pruning
+            if !is_pv && !in_check && is_quiet && !is_killer && moves_searched > 0 && search_depth <= 2 {
+                let futility_margin = if search_depth == 1 { 200_i16 } else { 400_i16 };
+                if static_eval + futility_margin <= alpha {
+                    continue;
+                }
+            }
+
+            // Late Move Pruning (LMP)
+            if !is_pv && !in_check && is_quiet && !is_killer
+                && search_depth <= 4
+                && moves_searched >= LMP_THRESHOLDS[search_depth as usize]
+            {
+                continue;
+            }
+
+            // SEE pruning for captures
+            if !is_pv && !in_check && is_capture && moves_searched > 0 && search_depth <= 3 && self.see(mv) < 0 {
+                continue;
+            }
 
             self.position.do_move(mv);
 
@@ -531,6 +582,25 @@ impl Search {
             scored_moves.swap(i, best_idx);
 
             let mv = scored_moves[i].0;
+            let move_type = mv.type_of();
+
+            // Delta Pruning
+            if move_type != MoveTypes::PROMOTION {
+                let captured_piece = if move_type == MoveTypes::EN_PASSANT {
+                    PieceType::PAWN
+                } else {
+                    type_of_piece(self.position.board[mv.to_sq()])
+                };
+                let delta = PIECE_VALUES_MG[captured_piece] + 200;
+                if stand_pat + delta < alpha {
+                    continue;
+                }
+            }
+
+            // SEE pruning in quiescence
+            if move_type != MoveTypes::PROMOTION && self.see(mv) < 0 {
+                continue;
+            }
 
             self.position.do_move(mv);
             let score = self.quiescence(-beta, -alpha, ply + 1).map(|s| -s);
@@ -552,5 +622,121 @@ impl Search {
         }
 
         Some(alpha)
+    }
+
+    fn see(&self, mv: Move) -> i16 {
+        let from = mv.from_sq();
+        let to = mv.to_sq();
+        let move_type = mv.type_of();
+
+        // Determine the initial captured piece value
+        let mut gain = [0i16; 32];
+        gain[0] = if move_type == MoveTypes::EN_PASSANT {
+            SEE_VALUES[PieceType::PAWN]
+        } else if move_type == MoveTypes::PROMOTION {
+            // For promotions, gain includes the promotion value minus the pawn
+            SEE_VALUES[type_of_piece(self.position.board[to])]
+                + SEE_VALUES[PieceType::QUEEN]
+                - SEE_VALUES[PieceType::PAWN]
+        } else {
+            SEE_VALUES[type_of_piece(self.position.board[to])]
+        };
+
+        let mut side_to_move = color_of_piece(self.position.board[from]);
+        let mut occupied = self.position.by_color_bb[Sides::BOTH];
+
+        // Remove the initial attacker from occupied
+        occupied ^= square_bb(from);
+
+        // For en passant, also remove the captured pawn
+        if move_type == MoveTypes::EN_PASSANT {
+            let ep_sq = (to as isize - pawn_push(side_to_move)) as usize;
+            occupied ^= square_bb(ep_sq);
+        }
+
+        let mut attackers = self.position.attackers_to(to, occupied);
+        let mut attacker_piece_type = if move_type == MoveTypes::PROMOTION {
+            PieceType::QUEEN
+        } else {
+            type_of_piece(self.position.board[from])
+        };
+
+        let mut depth = 0usize;
+        side_to_move ^= 1;
+
+        loop {
+            depth += 1;
+            if depth >= 32 {
+                break;
+            }
+
+            // Speculative store
+            gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
+
+            // Pruning: if the score can't improve, stop
+            if (-gain[depth]).max(gain[depth - 1]) < 0 {
+                break;
+            }
+
+            // Find least valuable attacker for current side
+            let my_attackers = attackers & self.position.by_color_bb[side_to_move];
+            if my_attackers == EMPTY {
+                break;
+            }
+
+            // Find least valuable piece type
+            attacker_piece_type = PieceType::NONE;
+            let mut from_bb = EMPTY;
+            for pt in [
+                PieceType::PAWN,
+                PieceType::KNIGHT,
+                PieceType::BISHOP,
+                PieceType::ROOK,
+                PieceType::QUEEN,
+                PieceType::KING,
+            ] {
+                from_bb = my_attackers & self.position.by_type_bb[side_to_move][pt];
+                if from_bb != EMPTY {
+                    attacker_piece_type = pt;
+                    break;
+                }
+            }
+
+            if attacker_piece_type == PieceType::NONE {
+                break;
+            }
+
+            // Remove this attacker from occupied to reveal x-ray attackers
+            let attacker_sq = bits::lsb(from_bb);
+            occupied ^= square_bb(attacker_sq);
+
+            // Update attackers: x-ray discovery for sliding pieces
+            if attacker_piece_type == PieceType::PAWN
+                || attacker_piece_type == PieceType::BISHOP
+                || attacker_piece_type == PieceType::QUEEN
+            {
+                attackers |= self.position.attack_bb(make_piece(0, PieceType::BISHOP), to, occupied)
+                    & (self.position.by_type_bb[Sides::BOTH][PieceType::BISHOP]
+                        | self.position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
+            }
+            if attacker_piece_type == PieceType::ROOK || attacker_piece_type == PieceType::QUEEN {
+                attackers |= self.position.attack_bb(make_piece(0, PieceType::ROOK), to, occupied)
+                    & (self.position.by_type_bb[Sides::BOTH][PieceType::ROOK]
+                        | self.position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
+            }
+
+            // Remove used attacker from attackers set
+            attackers &= occupied;
+
+            side_to_move ^= 1;
+        }
+
+        // Minimax walk-back
+        while depth > 1 {
+            depth -= 1;
+            gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
+        }
+
+        gain[0]
     }
 }

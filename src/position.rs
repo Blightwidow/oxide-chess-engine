@@ -477,6 +477,27 @@ impl Position {
                 .aligned(to, from, bits::lsb(self.by_type_bb[us][PieceType::KING]))
     }
 
+    pub fn attack_bb(&self, piece: Piece, sq: Square, occupied: Bitboard) -> Bitboard {
+        self.bitboards.attack_bb(piece, sq, occupied)
+    }
+
+    pub fn attackers_to(&self, sq: Square, occupied: Bitboard) -> Bitboard {
+        (self.bitboards.attack_bb(make_piece(Sides::WHITE, PieceType::PAWN), sq, EMPTY)
+            & self.by_type_bb[Sides::BLACK][PieceType::PAWN])
+            | (self.bitboards.attack_bb(make_piece(Sides::BLACK, PieceType::PAWN), sq, EMPTY)
+                & self.by_type_bb[Sides::WHITE][PieceType::PAWN])
+            | (self.bitboards.attack_bb(make_piece(0, PieceType::KNIGHT), sq, occupied)
+                & self.by_type_bb[Sides::BOTH][PieceType::KNIGHT])
+            | (self.bitboards.attack_bb(make_piece(0, PieceType::BISHOP), sq, occupied)
+                & (self.by_type_bb[Sides::BOTH][PieceType::BISHOP]
+                    | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
+            | (self.bitboards.attack_bb(make_piece(0, PieceType::ROOK), sq, occupied)
+                & (self.by_type_bb[Sides::BOTH][PieceType::ROOK]
+                    | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
+            | (self.bitboards.attack_bb(make_piece(0, PieceType::KING), sq, occupied)
+                & self.by_type_bb[Sides::BOTH][PieceType::KING])
+    }
+
     fn castling_masks() -> [usize; NrOf::SQUARES] {
         let mut masks: [usize; NrOf::SQUARES] = [0; NrOf::SQUARES];
 
