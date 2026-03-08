@@ -256,7 +256,7 @@ impl Uci {
                 };
 
                 println!(
-                    "Perft {} {}: {} {}ms {} MNodes/s",
+                    "Perft {} {}: {} {}ms {:.2} MNodes/s",
                     suite.name, depth, nodes, elapsed_ms, mnps
                 );
 
@@ -274,7 +274,7 @@ impl Uci {
         };
 
         println!(
-            "Perft aggregate: {} {}ms {} MNodes/s",
+            "Perft aggregate: {} {}ms {:.2} MNodes/s",
             total_nodes, total_ms, total_mnps
         );
     }

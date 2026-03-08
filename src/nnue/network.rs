@@ -147,6 +147,7 @@ impl Network {
     }
 
     /// Serialize network weights to binary format.
+    #[cfg(test)]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
 

@@ -21,7 +21,7 @@ use crate::{
 const DEFAULT_EVAL_FILE: &str = "nets/default.nnue";
 
 fn main() {
-    println!("Oxide v0.1.0 by Theo Dammaretz");
+    println!("Oxide v1.0.0 by Theo Dammaretz");
 
     let bitboards = Rc::new(Bitboards::new());
     let hasher = Rc::new(Hasher::new());
