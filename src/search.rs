@@ -6,13 +6,15 @@ use std::time;
 use crate::{
     bitboards::defs::EMPTY,
     evaluate::{
-        tables::PIECE_VALUES_MG,
         transposition::{HashData, NodeType},
         Eval,
     },
     defs::*,
     misc::bits,
-    movegen::{defs::{pawn_push, Move, MoveTypes}, Movegen},
+    movegen::{
+        defs::{pawn_push, Move, MoveTypes},
+        Movegen,
+    },
     nnue::NnueEval,
     position::Position,
     time::TimeManager,
@@ -35,7 +37,7 @@ pub struct Search {
     pub position: Position,
     pub movegen: Movegen,
     pub eval: Eval,
-    pub nnue: Option<NnueEval>,
+    pub nnue: NnueEval,
     pub nodes_searched: usize,
     seldepth: usize,
     time: TimeManager,
@@ -52,7 +54,7 @@ pub struct Search {
 
 impl Search {
     /// Initialize search with precomputed LMR table.
-    pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: Option<NnueEval>) -> Self {
+    pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: NnueEval) -> Self {
         // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2
         let mut lmr_table = [[0u8; 64]; 128];
         for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
@@ -126,18 +128,17 @@ impl Search {
         }
     }
 
-    /// Use NNUE evaluation if available, otherwise fall back to handcrafted eval.
     fn evaluate_position(&self) -> i16 {
-        if let Some(ref nnue) = self.nnue {
-            nnue.evaluate(&self.position)
-        } else {
-            self.eval.evaluate(&self.position)
-        }
+        self.nnue.evaluate(&self.position)
     }
 
     /// Load or replace the NNUE network from a file path.
     pub fn load_nnue(&mut self, path: &str) {
-        self.nnue = NnueEval::new(path);
+        if let Some(nnue) = NnueEval::new(path) {
+            self.nnue = nnue;
+        } else {
+            println!("info string Failed to load NNUE net: {}", path);
+        }
     }
 
     // ─── Perft ────────────────────────────────────────────────────────────────
@@ -315,17 +316,17 @@ impl Search {
         let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
         if is_capture {
             let victim_value = if move_type == MoveTypes::EN_PASSANT {
-                PIECE_VALUES_MG[PieceType::PAWN] as i32
+                SEE_VALUES[PieceType::PAWN] as i32
             } else {
-                PIECE_VALUES_MG[type_of_piece(self.position.board[to_sq])] as i32
+                SEE_VALUES[type_of_piece(self.position.board[to_sq])] as i32
             };
-            let attacker_value = PIECE_VALUES_MG[type_of_piece(self.position.board[from_sq])] as i32;
+            let attacker_value = SEE_VALUES[type_of_piece(self.position.board[from_sq])] as i32;
             return 100_000 + victim_value * 100 - attacker_value;
         }
 
         // Promotions
         if move_type == MoveTypes::PROMOTION {
-            return 100_000 + PIECE_VALUES_MG[mv.promotion_type()] as i32 * 100;
+            return 100_000 + SEE_VALUES[mv.promotion_type()] as i32 * 100;
         }
 
         // Killers
@@ -694,7 +695,7 @@ impl Search {
                 } else {
                     type_of_piece(self.position.board[mv.to_sq()])
                 };
-                let delta = PIECE_VALUES_MG[captured_piece] + 200;
+                let delta = SEE_VALUES[captured_piece] + 200;
                 if stand_pat + delta < alpha {
                     continue;
                 }

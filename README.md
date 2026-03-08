@@ -16,7 +16,7 @@ Or build and run the executable:
 
 ```bash
 cargo build -r
-./target/release/chessbot <command>
+./target/release/oxide <command>
 ```
 
 ### Benchmark
@@ -40,10 +40,10 @@ cargo build -r --target-dir=base   # Build baseline
 # Make changes...
 cargo build -r                     # Build new version
 ./bin/fastchess \
-    -engine cmd=./target/release/chessbot name="vX.X.X" \
-    -engine cmd=./base/release/chessbot name="vX.X.X" \
-    -pgnout file="games/vX.X.X.pgn" \
-    -openings file=8moves_v3.pgn format=pgn order=random \
+    -engine cmd=./target/release/oxide name="vX.X.X" \
+    -engine cmd=./base/release/oxide name="vY.Y.Y" \
+    -pgnout file="./games/vX.X.X-vY.Y.Y.pgn" \
+    -openings file=./data/openings.pgn format=pgn order=random \
     -each tc=8+0.08 \
     -rounds 5000 -repeat \
     -concurrency 8 \

@@ -28,10 +28,7 @@ fn main() {
     let movegen = Movegen::new(Rc::clone(&bitboards));
     let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
     let eval = Eval::new();
-    let nnue = NnueEval::new(DEFAULT_EVAL_FILE);
-    if nnue.is_none() {
-        println!("info string NNUE net not found, using handcrafted evaluation");
-    }
+    let nnue = NnueEval::new(DEFAULT_EVAL_FILE).expect("Failed to load NNUE net from nets/default.nnue");
     let mut search = Search::new(position, movegen, eval, nnue);
 
     Uci::main_loop(&mut search);

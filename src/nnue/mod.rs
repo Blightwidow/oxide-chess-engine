@@ -20,6 +20,15 @@ impl NnueEval {
         Some(Self { network })
     }
 
+    /// Create an NNUE evaluator with zero weights (returns 0 for all positions).
+    /// Used for tests that need a Search but don't depend on evaluation accuracy.
+    #[cfg(test)]
+    pub fn zeroed() -> Self {
+        Self {
+            network: Network::zeroed(),
+        }
+    }
+
     /// Evaluate the position from the side-to-move's perspective.
     ///
     /// Computes the accumulator from scratch by iterating over all pieces.

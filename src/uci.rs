@@ -1,11 +1,8 @@
 use std::time;
 
-use crate::{
-    evaluate::defs::DEFAULT_HASH_SIZE,
-    search::{
-        defs::{SearchLimits, FEN_START_POSITION},
-        Search,
-    },
+use crate::search::{
+    defs::{SearchLimits, FEN_START_POSITION},
+    Search,
 };
 
 use crate::benchmark::FENS;
@@ -171,7 +168,7 @@ impl Uci {
 
                     if selected_option == "Hash" {
                         search.eval.resize_transposition_table(
-                            value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).clamp(1, 512),
+                            value.parse::<usize>().unwrap_or(16).clamp(1, 512),
                         );
                     } else if selected_option == "EvalFile" {
                         search.load_nnue(value);
@@ -190,7 +187,7 @@ impl Uci {
 
         let mut limits = SearchLimits::default();
 
-        limits.hash_size = args.next().unwrap_or("16").parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE);
+        limits.hash_size = args.next().unwrap_or("16").parse::<usize>().unwrap_or(16);
         limits.threads = args.next().unwrap_or("1").parse::<usize>().unwrap_or(1);
         limits.depth = args.next().unwrap_or("13").parse::<u8>().unwrap_or(13);
 

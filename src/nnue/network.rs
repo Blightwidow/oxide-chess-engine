@@ -10,6 +10,18 @@ pub struct Network {
 }
 
 impl Network {
+    #[cfg(test)]
+    pub fn zeroed() -> Self {
+        Self {
+            ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE],
+            ft_biases: [0i16; HIDDEN_SIZE],
+            l1_weights: vec![[0i16; L1_SIZE]; HIDDEN_SIZE * 2],
+            l1_biases: [0i16; L1_SIZE],
+            l2_weights: [0i16; L1_SIZE],
+            l2_bias: 0,
+        }
+    }
+
     pub fn load(path: &str) -> Option<Self> {
         let data = std::fs::read(path).ok()?;
         Self::from_bytes(&data)
