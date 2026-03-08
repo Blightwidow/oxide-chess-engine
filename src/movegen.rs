@@ -1,4 +1,5 @@
 pub mod defs;
+mod test;
 
 use std::rc::Rc;
 
