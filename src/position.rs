@@ -492,6 +492,50 @@ impl Position {
                 .aligned(to, from, bits::lsb(self.by_type_bb[us][PieceType::KING]))
     }
 
+    pub fn display(&self) -> String {
+        let piece_char = |piece: Piece| -> char {
+            let c = match type_of_piece(piece) {
+                PieceType::PAWN => 'p',
+                PieceType::KNIGHT => 'n',
+                PieceType::BISHOP => 'b',
+                PieceType::ROOK => 'r',
+                PieceType::QUEEN => 'q',
+                PieceType::KING => 'k',
+                _ => ' ',
+            };
+            if color_of_piece(piece) == Sides::WHITE {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            }
+        };
+
+        let separator = "  +---+---+---+---+---+---+---+---+";
+        let mut result = String::new();
+        result.push_str(separator);
+        result.push('\n');
+
+        for rank in (0..8).rev() {
+            result.push_str(&format!("{} ", rank + 1));
+            for file in 0..8 {
+                let sq = square_of(file, rank);
+                let piece = self.board[sq];
+                let c = if piece == PieceType::NONE {
+                    ' '
+                } else {
+                    piece_char(piece)
+                };
+                result.push_str(&format!("| {} ", c));
+            }
+            result.push_str("|\n");
+            result.push_str(separator);
+            result.push('\n');
+        }
+
+        result.push_str("    a   b   c   d   e   f   g   h\n");
+        result
+    }
+
     pub fn attack_bb(&self, piece: Piece, sq: Square, occupied: Bitboard) -> Bitboard {
         self.bitboards.attack_bb(piece, sq, occupied)
     }

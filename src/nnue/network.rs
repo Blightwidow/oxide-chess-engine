@@ -239,4 +239,57 @@ mod test {
         let bytes = zero_network().to_bytes();
         assert!(Network::from_bytes(&bytes[..bytes.len() - 1]).is_none());
     }
+
+    #[test]
+    fn known_position_eval_sanity() {
+        use std::path::Path;
+        use std::rc::Rc;
+
+        use crate::bitboards::Bitboards;
+        use crate::defs::{PieceType, RangeOf, Sides};
+        use crate::hash::Hasher;
+        use crate::nnue::features::feature_index;
+        use crate::nnue::NnueEval;
+        use crate::position::Position;
+        use crate::search::defs::FEN_START_POSITION;
+
+        let net_path = "nets/default.nnue";
+        if !Path::new(net_path).exists() {
+            eprintln!("Skipping known_position_eval_sanity: {} not found", net_path);
+            return;
+        }
+
+        let nnue = NnueEval::new(net_path).expect("failed to load NNUE network");
+        let bitboards = Rc::new(Bitboards::new());
+        let hasher = Rc::new(Hasher::new());
+        let mut position = Position::new(bitboards, hasher);
+
+        // Test 1: starting position should be roughly balanced
+        position.set(FEN_START_POSITION.to_string());
+        let eval = nnue.evaluate(&position);
+        assert!(
+            eval > -200 && eval < 200,
+            "Starting position eval {} cp is out of expected range [-200, +200]",
+            eval
+        );
+
+        // Test 2: white up a queen should be clearly positive
+        // FEN: 4k3/8/8/8/8/8/8/4KQ2 w - - 0 1
+        position.set("4k3/8/8/8/8/8/8/4KQ2 w - - 0 1".to_string());
+        let eval_queen_up = nnue.evaluate(&position);
+        assert!(
+            eval_queen_up > 0,
+            "White up a queen should be positive, got {} cp",
+            eval_queen_up
+        );
+
+        // Test 3: black up a queen (flip), eval from side-to-move (white) should be negative
+        position.set("4kq2/8/8/8/8/8/8/4K3 w - - 0 1".to_string());
+        let eval_queen_down = nnue.evaluate(&position);
+        assert!(
+            eval_queen_down < 0,
+            "White down a queen should be negative, got {} cp",
+            eval_queen_down
+        );
+    }
 }

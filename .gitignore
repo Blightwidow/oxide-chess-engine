@@ -16,7 +16,10 @@ target/
 # fastchess
 config.json
 games/
-*.pgn
 
 # Old files used as scratch space when thinking
 .archive/
+
+
+# Claude files
+.claude/plans/

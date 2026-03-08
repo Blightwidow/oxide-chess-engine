@@ -10,7 +10,7 @@ use bullet::{
     trainer::{
         save::SavedFormat,
         schedule::{TrainingSchedule, TrainingSteps, lr::StepLR, wdl::ConstantWDL},
-        settings::LocalSettings,
+        settings::{LocalSettings, TestDataset},
     },
     value::{ValueTrainerBuilder, loader::SfBinpackLoader},
 };
@@ -79,7 +79,7 @@ fn main() {
 
     let settings = LocalSettings {
         threads: THREADS,
-        test_set: None,
+        test_set: Some(TestDataset::at("data/test/test.binpack")),
         output_directory: "checkpoints",
         batch_queue_size: 32,
     };

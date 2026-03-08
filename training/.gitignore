@@ -1,3 +1,6 @@
 checkpoints/
-data/
+data/*
+!data/test/
+data/test/*
+!data/test/test.binpack
 target/

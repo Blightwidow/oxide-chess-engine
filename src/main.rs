@@ -18,7 +18,7 @@ use crate::{
     search::Search, uci::Uci,
 };
 
-const DEFAULT_EVAL_FILE: &str = "nets/default.nnue";
+const DEFAULT_EVAL_FILE: &str = "./nets/default.nnue";
 
 fn main() {
     println!("Oxide v1.0.0 by Theo Dammaretz");

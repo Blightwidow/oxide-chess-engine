@@ -56,6 +56,8 @@ impl Uci {
                 Uci::bench(search, &mut args);
             } else if token == "bench_perft" {
                 Uci::bench_perft(search, &mut args);
+            } else if token == "eval" {
+                Uci::eval(search);
             } else if token == "help" {
                 Uci::help();
             } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
@@ -277,6 +279,33 @@ impl Uci {
             "Perft aggregate: {} {}ms {:.2} MNodes/s",
             total_nodes, total_ms, total_mnps
         );
+    }
+
+    fn eval(search: &Search) {
+        println!();
+        print!("{}", search.position.display());
+        println!();
+
+        let fen = search.position.fen();
+        let side_str = if search.position.side_to_move == crate::defs::Sides::WHITE {
+            "White"
+        } else {
+            "Black"
+        };
+
+        let raw_eval = search.nnue.evaluate(&search.position);
+        // raw_eval is from side-to-move's perspective; convert to white's perspective
+        let white_eval = if search.position.side_to_move == crate::defs::Sides::WHITE {
+            raw_eval
+        } else {
+            -raw_eval
+        };
+
+        println!("FEN: {}", fen);
+        println!("Side to move: {}", side_str);
+        println!("NNUE eval (white perspective): {} cp", white_eval);
+        println!("NNUE eval (side to move): {} cp", raw_eval);
+        println!();
     }
 
     fn help() {
