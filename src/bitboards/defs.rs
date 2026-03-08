@@ -40,14 +40,14 @@ pub const FILE_BB: [Bitboard; 8] = [
 ];
 
 pub const ADJACENT_FILES_BB: [Bitboard; 8] = [
-    FILE_ABB << 1,                           // A: only B
-    FILE_ABB | (FILE_ABB << 2),              // B: A+C
-    (FILE_ABB << 1) | (FILE_ABB << 3),       // C: B+D
-    (FILE_ABB << 2) | (FILE_ABB << 4),       // D: C+E
-    (FILE_ABB << 3) | (FILE_ABB << 5),       // E: D+F
-    (FILE_ABB << 4) | (FILE_ABB << 6),       // F: E+G
-    (FILE_ABB << 5) | (FILE_ABB << 7),       // G: F+H
-    FILE_ABB << 6,                           // H: only G
+    FILE_ABB << 1,                     // A: only B
+    FILE_ABB | (FILE_ABB << 2),        // B: A+C
+    (FILE_ABB << 1) | (FILE_ABB << 3), // C: B+D
+    (FILE_ABB << 2) | (FILE_ABB << 4), // D: C+E
+    (FILE_ABB << 3) | (FILE_ABB << 5), // E: D+F
+    (FILE_ABB << 4) | (FILE_ABB << 6), // F: E+G
+    (FILE_ABB << 5) | (FILE_ABB << 7), // G: F+H
+    FILE_ABB << 6,                     // H: only G
 ];
 
 pub fn file_bb(square: Square) -> Bitboard {

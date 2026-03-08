@@ -8,8 +8,8 @@ mod movegen;
 mod nnue;
 mod position;
 mod search;
-mod uci;
 mod time;
+mod uci;
 
 use std::rc::Rc;
 

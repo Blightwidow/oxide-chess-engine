@@ -163,8 +163,9 @@ impl Movegen {
                 NONE_SQUARE => EMPTY,
                 square => square_bb(square),
             };
-            let mut attack_bb: Bitboard =
-                self.bitboards.attack_bb(piece, from, EMPTY) & (position.by_color_bb[them] | en_passant_bb) & ep_target_bb;
+            let mut attack_bb: Bitboard = self.bitboards.attack_bb(piece, from, EMPTY)
+                & (position.by_color_bb[them] | en_passant_bb)
+                & ep_target_bb;
 
             while attack_bb != EMPTY {
                 let to: Square = bits::pop(&mut attack_bb);

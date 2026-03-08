@@ -1,8 +1,4 @@
-use crate::{
-    bitboards::defs::EMPTY,
-    defs::*,
-    movegen::defs::CastlingRights,
-};
+use crate::{bitboards::defs::EMPTY, defs::*, movegen::defs::CastlingRights};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct StateInfo {

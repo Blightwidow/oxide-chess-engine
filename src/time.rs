@@ -5,10 +5,7 @@ use std::{
     time::{self, Instant},
 };
 
-use crate::{
-    defs::Side,
-    search::defs::SearchLimits,
-};
+use crate::{defs::Side, search::defs::SearchLimits};
 
 use self::defs::*;
 

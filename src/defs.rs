@@ -124,14 +124,14 @@ mod test {
 
     #[test]
     fn file_of_known_squares() {
-        assert_eq!(file_of(0), 0);  // a1
+        assert_eq!(file_of(0), 0); // a1
         assert_eq!(file_of(63), 7); // h8
         assert_eq!(file_of(28), 4); // e4
     }
 
     #[test]
     fn rank_of_known_squares() {
-        assert_eq!(rank_of(0), 0);  // a1
+        assert_eq!(rank_of(0), 0); // a1
         assert_eq!(rank_of(63), 7); // h8
         assert_eq!(rank_of(28), 3); // e4
     }

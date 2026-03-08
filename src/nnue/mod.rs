@@ -2,10 +2,7 @@ pub mod defs;
 pub mod features;
 pub mod network;
 
-use crate::{
-    defs::*,
-    position::Position,
-};
+use crate::{defs::*, position::Position};
 
 use self::{defs::*, features::feature_index, network::Network};
 
@@ -21,8 +18,6 @@ impl NnueEval {
     }
 
     /// Create an NNUE evaluator with zero weights (returns 0 for all positions).
-    /// Used for tests that need a Search but don't depend on evaluation accuracy.
-    #[cfg(test)]
     pub fn zeroed() -> Self {
         Self {
             network: Network::zeroed(),

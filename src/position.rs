@@ -131,7 +131,9 @@ impl Position {
                 MoveTypes::EN_PASSANT => (to as isize - pawn_push(us)) as usize,
                 _ => to,
             };
-            self.zobrist ^= self.hasher.piece_key(color_of_piece(captured), type_of_piece(captured), captured_square);
+            self.zobrist ^= self
+                .hasher
+                .piece_key(color_of_piece(captured), type_of_piece(captured), captured_square);
         }
         if move_type == MoveTypes::PROMOTION {
             self.zobrist ^= self.hasher.piece_key(us, PieceType::PAWN, from);
@@ -356,20 +358,32 @@ impl Position {
         let ksq = bits::lsb(self.by_type_bb[defending_side][PieceType::KING]);
         let occupied = self.by_color_bb[Sides::BOTH];
 
-        (self.bitboards.attack_bb(make_piece(defending_side, PieceType::KNIGHT), ksq, occupied)
+        (self
+            .bitboards
+            .attack_bb(make_piece(defending_side, PieceType::KNIGHT), ksq, occupied)
             & self.by_type_bb[them][PieceType::KNIGHT])
-            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::BISHOP), ksq, occupied)
+            | (self
+                .bitboards
+                .attack_bb(make_piece(defending_side, PieceType::BISHOP), ksq, occupied)
                 & (self.by_type_bb[them][PieceType::BISHOP] | self.by_type_bb[them][PieceType::QUEEN]))
-            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::ROOK), ksq, occupied)
+            | (self
+                .bitboards
+                .attack_bb(make_piece(defending_side, PieceType::ROOK), ksq, occupied)
                 & (self.by_type_bb[them][PieceType::ROOK] | self.by_type_bb[them][PieceType::QUEEN]))
-            | (self.bitboards.attack_bb(make_piece(defending_side, PieceType::PAWN), ksq, EMPTY)
+            | (self
+                .bitboards
+                .attack_bb(make_piece(defending_side, PieceType::PAWN), ksq, EMPTY)
                 & self.by_type_bb[them][PieceType::PAWN])
     }
 
     pub fn is_square_attacked(&self, sq: Square, by_side: Side, occupied: Bitboard) -> bool {
         let bb = &self.by_type_bb[by_side];
         let them = occupied & self.by_color_bb[by_side];
-        (self.bitboards.attack_bb(make_piece(by_side ^ 1, PieceType::PAWN), sq, EMPTY) & bb[PieceType::PAWN] & them
+        (self
+            .bitboards
+            .attack_bb(make_piece(by_side ^ 1, PieceType::PAWN), sq, EMPTY)
+            & bb[PieceType::PAWN]
+            & them
             != EMPTY)
             || (self.bitboards.attack_bb(make_piece(0, PieceType::KNIGHT), sq, occupied) & bb[PieceType::KNIGHT] & them
                 != EMPTY)
@@ -483,18 +497,20 @@ impl Position {
     }
 
     pub fn attackers_to(&self, sq: Square, occupied: Bitboard) -> Bitboard {
-        (self.bitboards.attack_bb(make_piece(Sides::WHITE, PieceType::PAWN), sq, EMPTY)
+        (self
+            .bitboards
+            .attack_bb(make_piece(Sides::WHITE, PieceType::PAWN), sq, EMPTY)
             & self.by_type_bb[Sides::BLACK][PieceType::PAWN])
-            | (self.bitboards.attack_bb(make_piece(Sides::BLACK, PieceType::PAWN), sq, EMPTY)
+            | (self
+                .bitboards
+                .attack_bb(make_piece(Sides::BLACK, PieceType::PAWN), sq, EMPTY)
                 & self.by_type_bb[Sides::WHITE][PieceType::PAWN])
             | (self.bitboards.attack_bb(make_piece(0, PieceType::KNIGHT), sq, occupied)
                 & self.by_type_bb[Sides::BOTH][PieceType::KNIGHT])
             | (self.bitboards.attack_bb(make_piece(0, PieceType::BISHOP), sq, occupied)
-                & (self.by_type_bb[Sides::BOTH][PieceType::BISHOP]
-                    | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
+                & (self.by_type_bb[Sides::BOTH][PieceType::BISHOP] | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
             | (self.bitboards.attack_bb(make_piece(0, PieceType::ROOK), sq, occupied)
-                & (self.by_type_bb[Sides::BOTH][PieceType::ROOK]
-                    | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
+                & (self.by_type_bb[Sides::BOTH][PieceType::ROOK] | self.by_type_bb[Sides::BOTH][PieceType::QUEEN]))
             | (self.bitboards.attack_bb(make_piece(0, PieceType::KING), sq, occupied)
                 & self.by_type_bb[Sides::BOTH][PieceType::KING])
     }

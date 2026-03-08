@@ -54,7 +54,7 @@ impl Bitboards {
 
             for piece in [PieceType::ROOK, PieceType::BISHOP] {
                 for to in RangeOf::SQUARES {
-                    if Bitboards::sliding_attack(piece, from, EMPTY) & square_bb(to) == EMPTY  {
+                    if Bitboards::sliding_attack(piece, from, EMPTY) & square_bb(to) == EMPTY {
                         continue;
                     }
 

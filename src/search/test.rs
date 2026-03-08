@@ -99,9 +99,7 @@ mod test {
     fn perft_endgame() {
         let mut search = make_search();
 
-        search
-            .position
-            .set("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -".to_string());
+        search.position.set("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -".to_string());
 
         assert_eq!(search.perft(1, true), 14);
         assert_eq!(search.perft(2, true), 191);
@@ -132,7 +130,12 @@ mod test {
         let (mv, score) = search_position("6k1/5ppp/8/8/8/8/8/3R2K1 w - - 0 1", 3);
         assert_eq!(mv, "d1d8", "Expected Rd8# but got {}", mv);
         assert!(is_mate_score(score), "Expected mate score but got {}", score);
-        assert_eq!(mate_in_n(score), Some(1), "Expected mate in 1 but got {:?}", mate_in_n(score));
+        assert_eq!(
+            mate_in_n(score),
+            Some(1),
+            "Expected mate in 1 but got {:?}",
+            mate_in_n(score)
+        );
     }
 
     #[test]
@@ -146,13 +149,12 @@ mod test {
     #[test]
     fn mate_in_1_fools() {
         // Position after 1.f3 e5 2.g4 — black to play Qh4#
-        let (mv, score) =
-            search_position("rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", 3);
+        let (mv, score) = search_position("rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", 3);
         assert_eq!(mv, "d8h4", "Expected Qh4# but got {}", mv);
         assert!(is_mate_score(score), "Expected mate score but got {}", score);
         assert_eq!(mate_in_n(score), Some(1));
     }
-    
+
     #[test]
     fn mate_in_1_rook_king() {
         // Multiple mates exist (Ra1# and Rh1#), just check the engine finds a forced mate
@@ -167,7 +169,12 @@ mod test {
     fn mate_in_2_endgame() {
         let (_, score) = search_position("kbK5/pp6/1P6/8/8/8/8/R7 w - - 0 1", 5);
         assert!(is_mate_score(score), "Expected mate score but got {}", score);
-        assert_eq!(mate_in_n(score), Some(2), "Expected mate in 2 but got {:?}", mate_in_n(score));
+        assert_eq!(
+            mate_in_n(score),
+            Some(2),
+            "Expected mate in 2 but got {:?}",
+            mate_in_n(score)
+        );
     }
 
     // ========== Tactical tests ==========
@@ -188,7 +195,11 @@ mod test {
         // White can capture undefended queen with Bxe5
         let (mv, score) = search_position("rnb1kbnr/pppppppp/8/4q3/3B4/8/PPP1PPPP/RN1QKBNR w KQkq - 0 1", 4);
         assert_eq!(mv, "d4e5", "Expected Bxe5 winning queen but got {}", mv);
-        assert!(score > 500, "Expected large advantage after winning queen but got {}", score);
+        assert!(
+            score > 500,
+            "Expected large advantage after winning queen but got {}",
+            score
+        );
     }
 
     // ========== Evaluation sanity tests ==========

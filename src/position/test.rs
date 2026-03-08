@@ -78,7 +78,7 @@ mod test {
 
     #[test]
     fn castling_do_undo() {
-        use crate::defs::{make_piece, PieceType, Sides, square_of};
+        use crate::defs::{make_piece, square_of, PieceType, Sides};
         use crate::movegen::defs::MoveTypes;
 
         let bitboards = Rc::new(Bitboards::new());
@@ -115,13 +115,16 @@ mod test {
             position.undo_move(mv);
 
             assert_eq!(position.board, initial_board, "Board not restored after castling undo");
-            assert_eq!(position.zobrist, initial_zobrist, "Zobrist not restored after castling undo");
+            assert_eq!(
+                position.zobrist, initial_zobrist,
+                "Zobrist not restored after castling undo"
+            );
         }
     }
 
     #[test]
     fn en_passant_do_undo() {
-        use crate::defs::{PieceType, square_of};
+        use crate::defs::{square_of, PieceType};
         use crate::movegen::defs::MoveTypes;
 
         let bitboards = Rc::new(Bitboards::new());
@@ -203,7 +206,10 @@ mod test {
             position.undo_move(mv);
 
             assert_eq!(position.board, initial_board, "Board not restored after promotion undo");
-            assert_eq!(position.zobrist, initial_zobrist, "Zobrist not restored after promotion undo");
+            assert_eq!(
+                position.zobrist, initial_zobrist,
+                "Zobrist not restored after promotion undo"
+            );
         }
     }
 }

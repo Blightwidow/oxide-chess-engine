@@ -5,11 +5,11 @@ use std::time;
 
 use crate::{
     bitboards::defs::EMPTY,
+    defs::*,
     evaluate::{
         transposition::{HashData, NodeType},
         Eval,
     },
-    defs::*,
     misc::bits,
     movegen::{
         defs::{pawn_push, Move, MoveTypes},
@@ -84,19 +84,20 @@ impl Search {
 
     /// Entry point: reset state, run iterative deepening, and print bestmove.
     pub fn run(&mut self, limits: SearchLimits) {
-        // Reset per-search state
-        self.nodes_searched = 0;
-        self.seldepth = 0;
         self.start_time = time::Instant::now();
-        self.killers = [[Move::none(); 2]; MAX_PLY];
-        self.history = [[0; 64]; 64];
-        self.nodes_until_check = CHECK_INTERVAL;
 
         if limits.perft > 0 {
             let nodes = self.perft(limits.perft, true);
             println!("\nNodes searched: {}\n", nodes);
             return;
         }
+
+        // Reset per-search state
+        self.nodes_searched = 0;
+        self.seldepth = 0;
+        self.killers = [[Move::none(); 2]; MAX_PLY];
+        self.history = [[0; 64]; 64];
+        self.nodes_until_check = CHECK_INTERVAL;
 
         self.time = TimeManager::new(
             limits,
@@ -109,7 +110,10 @@ impl Search {
             if let Some((mv, _score)) = result {
                 // Probe TT for ponder move
                 self.position.do_move(mv);
-                let ponder = self.eval.transposition_table.probe(self.position.zobrist)
+                let ponder = self
+                    .eval
+                    .transposition_table
+                    .probe(self.position.zobrist)
                     .map(|entry| entry.best_move)
                     .filter(|m| *m != Move::none());
                 self.position.undo_move(mv);
@@ -144,7 +148,7 @@ impl Search {
     // ─── Perft ────────────────────────────────────────────────────────────────
 
     /// Performance test: count leaf nodes at a given depth. Used for move generation correctness.
-    fn perft(&mut self, depth: u8, root: bool) -> u64 {
+    pub(crate) fn perft(&mut self, depth: u8, root: bool) -> u64 {
         let mut count: u64;
         let mut nodes: u64 = 0;
         let leaf: bool = depth == 2;
@@ -222,7 +226,10 @@ impl Search {
 
             // Aspiration windows
             let (mut alpha, mut beta) = if current_depth >= 4 && best_score_overall.abs() < VALUE_MATE - 100 {
-                (best_score_overall.saturating_sub(25), best_score_overall.saturating_add(25))
+                (
+                    best_score_overall.saturating_sub(25),
+                    best_score_overall.saturating_add(25),
+                )
             } else {
                 (-VALUE_INFINITE, VALUE_INFINITE)
             };
@@ -261,7 +268,11 @@ impl Search {
                 if current_best_move.is_some() && failed < 2 {
                     if best_score <= alpha {
                         // Fail low - widen alpha
-                        alpha = if failed == 0 { alpha.saturating_sub(100) } else { -VALUE_INFINITE };
+                        alpha = if failed == 0 {
+                            alpha.saturating_sub(100)
+                        } else {
+                            -VALUE_INFINITE
+                        };
                         failed += 1;
                         if failed == 1 {
                             move_scores.clear();
@@ -270,7 +281,11 @@ impl Search {
                     }
                     if best_score >= beta {
                         // Fail high - widen beta
-                        beta = if failed == 0 { beta.saturating_add(100) } else { VALUE_INFINITE };
+                        beta = if failed == 0 {
+                            beta.saturating_add(100)
+                        } else {
+                            VALUE_INFINITE
+                        };
                         failed += 1;
                         if failed == 1 {
                             move_scores.clear();
@@ -359,14 +374,7 @@ impl Search {
     ///      - LMR: reduce quiet late moves, re-search at full depth on fail-high
     ///   5. Beta cutoff → update killers/history, store TT as LowerBound
     ///   6. After loop → store TT as Exact (alpha improved) or UpperBound
-    fn alpha_beta(
-        &mut self,
-        depth: u8,
-        mut alpha: i16,
-        beta: i16,
-        ply: usize,
-        allow_null: bool,
-    ) -> Option<i16> {
+    fn alpha_beta(&mut self, depth: u8, mut alpha: i16, beta: i16, ply: usize, allow_null: bool) -> Option<i16> {
         if self.check_time() {
             return None;
         }
@@ -478,7 +486,10 @@ impl Search {
         }
 
         // Score moves for ordering
-        let mut scored_moves: Vec<(Move, i32)> = moves.iter().map(|&mv| (mv, self.score_move(mv, tt_move, ply))).collect();
+        let mut scored_moves: Vec<(Move, i32)> = moves
+            .iter()
+            .map(|&mv| (mv, self.score_move(mv, tt_move, ply)))
+            .collect();
 
         let original_alpha = alpha;
         let mut best_move = Move::none();
@@ -502,8 +513,7 @@ impl Search {
             // Check capture/promotion before do_move since board changes
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();
-            let is_capture = self.position.board[to_sq] != PieceType::NONE
-                || move_type == MoveTypes::EN_PASSANT;
+            let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
             let is_promotion = move_type == MoveTypes::PROMOTION;
             let is_killer = move_score == 90_000 || move_score == 80_000;
             let is_quiet = !is_capture && !is_promotion;
@@ -519,7 +529,10 @@ impl Search {
 
             // Late Move Pruning (LMP): at low depth, skip quiet moves beyond a threshold.
             // Moves are ordered by score, so late moves are unlikely to be good.
-            if !is_pv && !in_check && is_quiet && !is_killer
+            if !is_pv
+                && !in_check
+                && is_quiet
+                && !is_killer
                 && search_depth <= 4
                 && moves_searched >= LMP_THRESHOLDS[search_depth as usize]
             {
@@ -537,12 +550,14 @@ impl Search {
             let score;
             if moves_searched == 0 {
                 // First move (expected best): search with full alpha-beta window
-                score = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
+                score = self
+                    .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true)
+                    .map(|s| -s);
             } else {
                 // Late Move Reductions (LMR): reduce quiet late moves by a logarithmic
                 // amount. If the reduced search fails high, re-search at full depth.
-                let do_lmr = !in_check && !is_capture && !is_promotion && !is_killer
-                    && moves_searched >= 3 && search_depth >= 3;
+                let do_lmr =
+                    !in_check && !is_capture && !is_promotion && !is_killer && moves_searched >= 3 && search_depth >= 3;
 
                 let reduction = if do_lmr {
                     self.lmr_table[search_depth as usize][moves_searched.min(63)]
@@ -553,12 +568,16 @@ impl Search {
                 let reduced_depth = (search_depth - 1).saturating_sub(reduction);
 
                 // Step 1: Null-window search (possibly at reduced depth for LMR)
-                let mut s = self.alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
+                let mut s = self
+                    .alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true)
+                    .map(|s| -s);
 
                 // Step 2: LMR re-search — if reduced search beat alpha, try full depth
                 if let Some(val) = s {
                     if val > alpha && reduction > 0 {
-                        s = self.alpha_beta(search_depth - 1, (-alpha).saturating_sub(1), -alpha, ply + 1, true).map(|s| -s);
+                        s = self
+                            .alpha_beta(search_depth - 1, (-alpha).saturating_sub(1), -alpha, ply + 1, true)
+                            .map(|s| -s);
                     }
                 }
 
@@ -566,7 +585,9 @@ impl Search {
                 // re-search with full window to get exact score
                 if let Some(val) = s {
                     if val > alpha && val < beta {
-                        s = self.alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true).map(|s| -s);
+                        s = self
+                            .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true)
+                            .map(|s| -s);
                     }
                 }
 
@@ -583,13 +604,12 @@ impl Search {
                     }
                     if score >= beta {
                         // Beta cutoff — update killer moves and history table for quiet moves
-                        let is_capture = self.position.board[mv.to_sq()] != PieceType::NONE
-                            || mv.type_of() == MoveTypes::EN_PASSANT;
+                        let is_capture =
+                            self.position.board[mv.to_sq()] != PieceType::NONE || mv.type_of() == MoveTypes::EN_PASSANT;
                         if !is_capture && ply < MAX_PLY {
                             self.killers[ply][1] = self.killers[ply][0];
                             self.killers[ply][0] = mv;
-                            self.history[mv.from_sq()][mv.to_sq()] +=
-                                (search_depth as i32) * (search_depth as i32);
+                            self.history[mv.from_sq()][mv.to_sq()] += (search_depth as i32) * (search_depth as i32);
                         }
 
                         self.eval.transposition_table.store(
@@ -747,8 +767,7 @@ impl Search {
             SEE_VALUES[PieceType::PAWN]
         } else if move_type == MoveTypes::PROMOTION {
             // For promotions, gain includes the promotion value minus the pawn
-            SEE_VALUES[type_of_piece(self.position.board[to])]
-                + SEE_VALUES[PieceType::QUEEN]
+            SEE_VALUES[type_of_piece(self.position.board[to])] + SEE_VALUES[PieceType::QUEEN]
                 - SEE_VALUES[PieceType::PAWN]
         } else {
             SEE_VALUES[type_of_piece(self.position.board[to])]

@@ -7,7 +7,7 @@ mod test {
     const E4: Square = 28; // square_of(4, 3)
     const E7: Square = 52; // square_of(4, 6)
     const E8: Square = 60; // square_of(4, 7)
-    const E1: Square = 4;  // square_of(4, 0)
+    const E1: Square = 4; // square_of(4, 0)
     const A1: Square = 0;
     const H1: Square = 7;
     const A8: Square = 56;
@@ -33,7 +33,12 @@ mod test {
     fn all_promotion_types() {
         for promo in [PieceType::KNIGHT, PieceType::BISHOP, PieceType::ROOK, PieceType::QUEEN] {
             let mv = Move::make(E7, E8, promo, MoveTypes::PROMOTION);
-            assert_eq!(mv.promotion_type(), promo, "promotion type mismatch for piece {}", promo);
+            assert_eq!(
+                mv.promotion_type(),
+                promo,
+                "promotion type mismatch for piece {}",
+                promo
+            );
         }
     }
 

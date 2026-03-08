@@ -48,8 +48,8 @@ impl Network {
             return None;
         }
 
-        let expected_size = 20
-            + (FEATURE_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * 2 * L1_SIZE + L1_SIZE + L1_SIZE + 1) * 2;
+        let expected_size =
+            20 + (FEATURE_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * 2 * L1_SIZE + L1_SIZE + L1_SIZE + 1) * 2;
         if data.len() < expected_size {
             return None;
         }
