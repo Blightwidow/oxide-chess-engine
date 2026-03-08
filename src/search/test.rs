@@ -19,7 +19,7 @@ mod test {
         let hasher = Rc::new(Hasher::new());
         let movegen = Movegen::new(Rc::clone(&bitboards));
         let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
-        Search::new(position, movegen, Eval::new())
+        Search::new(position, movegen, Eval::new(), None)
     }
 
     fn search_position(fen: &str, depth: u8) -> (String, i16) {

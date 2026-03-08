@@ -37,6 +37,7 @@ impl Uci {
                 println!("id name Oxide");
                 println!("id author Theo Dammaretz");
                 println!("option name Hash type spin default 128 min 1 max 512");
+                println!("option name EvalFile type string default nets/default.nnue");
                 println!("uciok");
             } else if token == "xboard" {
                 println!("This engine does not support the xboard protocol.");
@@ -168,9 +169,13 @@ impl Uci {
                 "value" => {
                     let value = args.next().unwrap_or("");
 
-                    if selected_option == "Hash" { search.eval.resize_transposition_table(
-                        value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).clamp(1, 512),
-                    ) }
+                    if selected_option == "Hash" {
+                        search.eval.resize_transposition_table(
+                            value.parse::<usize>().unwrap_or(DEFAULT_HASH_SIZE).clamp(1, 512),
+                        );
+                    } else if selected_option == "EvalFile" {
+                        search.load_nnue(value);
+                    }
                 }
                 _ => (),
             }

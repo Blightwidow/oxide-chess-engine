@@ -5,6 +5,7 @@ mod evaluate;
 mod hash;
 mod misc;
 mod movegen;
+mod nnue;
 mod position;
 mod search;
 mod uci;
@@ -13,9 +14,11 @@ mod time;
 use std::rc::Rc;
 
 use crate::{
-    bitboards::Bitboards, evaluate::Eval, hash::Hasher, movegen::Movegen, position::Position, search::Search,
-    uci::Uci,
+    bitboards::Bitboards, evaluate::Eval, hash::Hasher, movegen::Movegen, nnue::NnueEval, position::Position,
+    search::Search, uci::Uci,
 };
+
+const DEFAULT_EVAL_FILE: &str = "nets/default.nnue";
 
 fn main() {
     println!("Oxide v0.1.0 by Theo Dammaretz");
@@ -25,7 +28,11 @@ fn main() {
     let movegen = Movegen::new(Rc::clone(&bitboards));
     let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
     let eval = Eval::new();
-    let mut search = Search::new(position, movegen, eval);
+    let nnue = NnueEval::new(DEFAULT_EVAL_FILE);
+    if nnue.is_none() {
+        println!("info string NNUE net not found, using handcrafted evaluation");
+    }
+    let mut search = Search::new(position, movegen, eval, nnue);
 
     Uci::main_loop(&mut search);
 }

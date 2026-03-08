@@ -80,7 +80,8 @@ cargo build -r                     # Build new version
 
 ### Evaluation
 
-* Tapered evaluation (middlegame/endgame interpolation by game phase)
+* NNUE evaluation support (768→256×2→32→1 architecture, integer arithmetic)
+* Handcrafted fallback: tapered evaluation (middlegame/endgame interpolation by game phase)
 * Piece-square tables (separate MG and EG)
 * Material values tuned for MG and EG
 * Pawn structure: doubled, isolated, and passed pawn evaluation

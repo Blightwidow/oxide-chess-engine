@@ -42,6 +42,9 @@ Stops the current search (handled by time manager cutoff).
 ### `setoption name Hash value <n>`
 Sets the transposition table size in MB (1-512). Default: 16 MB.
 
+### `setoption name EvalFile value <path>`
+Sets the NNUE network file path. Default: `nets/default.nnue`. If the file cannot be loaded, the engine falls back to handcrafted evaluation.
+
 ### `bench [hash_size] [threads] [depth]`
 Runs the benchmark suite (46 positions). Default depth: 13. Reports total nodes, time, and nodes/second.
 

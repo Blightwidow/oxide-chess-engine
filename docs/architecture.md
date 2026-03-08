@@ -10,7 +10,7 @@ Oxide is a single-threaded UCI chess engine written in Rust. This document descr
 Bitboards (Rc) ──┬──> Movegen
                   └──> Position <── Hasher (Rc)
 
-Search owns: Position, Movegen, Eval
+Search owns: Position, Movegen, Eval, Option<NnueEval>
 Uci::main_loop(&mut Search)
 ```
 
@@ -23,7 +23,8 @@ Shared data (`Bitboards`, `Hasher`) is distributed via `Rc` (reference counting)
 | **main** | `src/main.rs` | Initialization, component wiring |
 | **uci** | `src/uci.rs` | UCI protocol handler, main input loop |
 | **search** | `src/search.rs` | Negamax with alpha-beta, iterative deepening |
-| **evaluate** | `src/evaluate.rs` | Tapered eval with piece-square tables |
+| **evaluate** | `src/evaluate.rs` | Handcrafted tapered eval with piece-square tables |
+| **nnue** | `src/nnue/` | NNUE neural network evaluation (optional) |
 | **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
 | **movegen** | `src/movegen.rs` | Legal move generation |
 | **bitboards** | `src/bitboards.rs` | Magic bitboards, attack tables, LERF mapping |
@@ -70,3 +71,16 @@ Move types: Normal (0), Promotion (1), En Passant (2), Castling (3).
 ## Dependencies
 
 The engine has a single external dependency: `arrayvec` (stack-allocated move lists capped at 256 moves).
+
+## NNUE Evaluation
+
+The engine optionally supports NNUE (Efficiently Updatable Neural Network) evaluation via the `src/nnue/` module:
+
+| File | Purpose |
+|------|---------|
+| `src/nnue/mod.rs` | `NnueEval` struct, `evaluate()` entry point |
+| `src/nnue/defs.rs` | Network architecture constants |
+| `src/nnue/features.rs` | Feature index mapping (768-feature set) |
+| `src/nnue/network.rs` | Weight loading, binary format, forward pass |
+
+Architecture: `Input(768) → Accumulator(256×2) → Hidden(32) → Output(1)` using integer arithmetic (i16/i32) with clipped ReLU activations. The 768-feature set encodes (color, piece_type, square) tuples, with perspective flipping for the black side. Network weights are loaded from a `.nnue` binary file at startup. If no file is found, the engine falls back to the handcrafted evaluation.

@@ -104,3 +104,33 @@ Return score from perspective of side to move
 ```
 
 The final score is clamped to `[-VALUE_INFINITE, VALUE_INFINITE]`.
+
+## NNUE Evaluation (Optional)
+
+The engine supports an optional NNUE (Efficiently Updatable Neural Network) evaluation that replaces the handcrafted eval when a trained network file is available.
+
+### Architecture
+
+```
+768 inputs → [256] accumulator (per perspective) → CReLU
+[512] concatenated → [32] hidden → CReLU → [1] output → scale to centipawns
+```
+
+- **Input features**: 768 = 2 colors × 6 piece types × 64 squares
+- **Perspective**: White and black perspectives computed separately. For black, colors are swapped and squares vertically flipped.
+- **Quantization**: Accumulator clipped to [0, 255], output scaled by 400/(255×64)
+- **Arithmetic**: Pure integer (i16/i32), no floating point
+
+### Network File Format
+
+Binary `.nnue` file with header:
+- Magic: `OXNN` (4 bytes)
+- Version: `1` (u32 LE)
+- Feature size, hidden size, L1 size (3 × u32 LE)
+- Weights and biases as i16 little-endian
+
+Default path: `nets/default.nnue`. Configurable via `setoption name EvalFile value <path>`.
+
+### Fallback
+
+If no network file is found, the engine automatically uses the handcrafted evaluation described above.

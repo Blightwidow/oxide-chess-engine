@@ -13,6 +13,7 @@ use crate::{
     defs::*,
     misc::bits,
     movegen::{defs::{pawn_push, Move, MoveTypes}, Movegen},
+    nnue::NnueEval,
     position::Position,
     time::TimeManager,
 };
@@ -34,6 +35,7 @@ pub struct Search {
     pub position: Position,
     pub movegen: Movegen,
     pub eval: Eval,
+    pub nnue: Option<NnueEval>,
     pub nodes_searched: usize,
     seldepth: usize,
     time: TimeManager,
@@ -50,7 +52,7 @@ pub struct Search {
 
 impl Search {
     /// Initialize search with precomputed LMR table.
-    pub fn new(position: Position, movegen: Movegen, eval: Eval) -> Self {
+    pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: Option<NnueEval>) -> Self {
         // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2
         let mut lmr_table = [[0u8; 64]; 128];
         for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
@@ -65,6 +67,7 @@ impl Search {
             nodes_searched: 0,
             seldepth: 0,
             eval,
+            nnue,
             time: TimeManager::default(),
             start_time: time::Instant::now(),
             killers: [[Move::none(); 2]; MAX_PLY],
@@ -118,9 +121,23 @@ impl Search {
                 println!("bestmove 0000");
             }
         } else {
-            let score = self.eval.evaluate(&self.position);
+            let score = self.evaluate_position();
             println!("info depth 0 score cp {}", score);
         }
+    }
+
+    /// Use NNUE evaluation if available, otherwise fall back to handcrafted eval.
+    fn evaluate_position(&self) -> i16 {
+        if let Some(ref nnue) = self.nnue {
+            nnue.evaluate(&self.position)
+        } else {
+            self.eval.evaluate(&self.position)
+        }
+    }
+
+    /// Load or replace the NNUE network from a file path.
+    pub fn load_nnue(&mut self, path: &str) {
+        self.nnue = NnueEval::new(path);
     }
 
     // ─── Perft ────────────────────────────────────────────────────────────────
@@ -420,7 +437,7 @@ impl Search {
         }
 
         // Static eval for pruning decisions
-        let static_eval = self.eval.evaluate(&self.position);
+        let static_eval = self.evaluate_position();
         let is_pv = (beta as i32) - (alpha as i32) > 1;
 
         // Reverse Futility Pruning (RFP)
@@ -631,7 +648,7 @@ impl Search {
 
         // Stand pat: assume we can at least achieve the static eval by not capturing.
         // If it already beats beta, prune. Otherwise use it as alpha floor.
-        let stand_pat = self.eval.evaluate(&self.position);
+        let stand_pat = self.evaluate_position();
         if stand_pat >= beta {
             return Some(beta);
         }
