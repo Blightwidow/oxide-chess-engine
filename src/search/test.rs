@@ -21,7 +21,7 @@ mod test {
         let movegen = Movegen::new(Rc::clone(&bitboards));
         let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
         let nnue = NnueEval::zeroed();
-        Search::new(position, movegen, Eval::new(), nnue)
+        Search::new(position, movegen, Eval::new(), nnue, true)
     }
 
     fn search_position(fen: &str, depth: u8) -> (String, i16) {

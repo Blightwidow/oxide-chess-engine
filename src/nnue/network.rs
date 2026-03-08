@@ -10,7 +10,6 @@ pub struct Network {
 }
 
 impl Network {
-    #[cfg(test)]
     pub fn zeroed() -> Self {
         Self {
             ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE],

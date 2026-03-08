@@ -28,8 +28,17 @@ fn main() {
     let movegen = Movegen::new(Rc::clone(&bitboards));
     let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
     let eval = Eval::new();
-    let nnue = NnueEval::new(DEFAULT_EVAL_FILE).expect("Failed to load NNUE net from nets/default.nnue");
-    let mut search = Search::new(position, movegen, eval, nnue);
+    let (nnue, has_nnue) = match NnueEval::new(DEFAULT_EVAL_FILE) {
+        Some(nnue) => {
+            println!("info string NNUE file {} loaded, evaluation enabled", DEFAULT_EVAL_FILE);
+            (nnue, true)
+        },
+        None => {
+            eprintln!("info string NNUE file not found, evaluation disabled");
+            (NnueEval::zeroed(), false)
+        }
+    };
+    let mut search = Search::new(position, movegen, eval, nnue, has_nnue);
 
     Uci::main_loop(&mut search);
 }
