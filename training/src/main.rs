@@ -70,10 +70,10 @@ fn main() {
             batch_size: 16384,
             batches_per_superbatch: 6104,
             start_superbatch: 1,
-            end_superbatch: 40,
+            end_superbatch: 60,
         },
         wdl_scheduler: ConstantWDL { value: 0.75 },
-        lr_scheduler: StepLR { start: 0.001, gamma: 0.1, step: 18 },
+        lr_scheduler: StepLR { start: 0.001, gamma: 0.3, step: 15 },
         save_rate: 10,
     };
 
