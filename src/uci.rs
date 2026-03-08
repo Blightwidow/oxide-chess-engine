@@ -33,8 +33,8 @@ impl Uci {
             if token == "uci" {
                 println!("id name Oxide");
                 println!("id author Theo Dammaretz");
-                println!("option name Hash type spin default 128 min 1 max 512");
-                println!("option name EvalFile type string default nets/default.nnue");
+                println!("option name Hash type spin default 16 min 1 max 512");
+                println!("option name EvalFile type string default <embedded>");
                 println!("uciok");
             } else if token == "xboard" {
                 println!("This engine does not support the xboard protocol.");

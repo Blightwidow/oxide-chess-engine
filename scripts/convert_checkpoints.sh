@@ -36,11 +36,15 @@ for quantised in "$CHECKPOINTS_DIR"/*/quantised.bin; do
         continue
     fi
 
-    hash=$(head -c 16 /dev/urandom | shasum -a 256 | cut -c1-12)
-    output="$NETS_DIR/${hash}.nnue"
+    tmp_output="$NETS_DIR/_tmp_convert.nnue"
 
-    echo "Converting $(basename "$checkpoint_dir") -> $output"
-    "$CONVERT_BIN" "$quantised" "$output"
+    echo "Converting $(basename "$checkpoint_dir")..."
+    "$CONVERT_BIN" "$quantised" "$tmp_output"
+
+    hash=$(shasum -a 256 "$tmp_output" | cut -c1-12)
+    output="$NETS_DIR/nn-${hash}.nnue"
+    mv "$tmp_output" "$output"
+    echo "  -> $output"
 
     # Mark as converted so we don't redo it
     echo "$output" > "$marker"

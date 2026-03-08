@@ -18,7 +18,8 @@ use crate::{
     search::Search, uci::Uci,
 };
 
-const DEFAULT_EVAL_FILE: &str = "./nets/default.nnue";
+pub const DEFAULT_EVAL_FILE: &str = "nn-eab269a07a62.nnue";
+pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-eab269a07a62.nnue"));
 
 fn main() {
     println!("Oxide v1.0.0 by Theo Dammaretz");
@@ -28,17 +29,13 @@ fn main() {
     let movegen = Movegen::new(Rc::clone(&bitboards));
     let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
     let eval = Eval::new();
-    let (nnue, has_nnue) = match NnueEval::new(DEFAULT_EVAL_FILE) {
-        Some(nnue) => {
-            println!("info string NNUE file {} loaded, evaluation enabled", DEFAULT_EVAL_FILE);
-            (nnue, true)
-        }
-        None => {
-            eprintln!("info string NNUE file not found, evaluation disabled");
-            (NnueEval::zeroed(), false)
-        }
-    };
-    let mut search = Search::new(position, movegen, eval, nnue, has_nnue);
+    let nnue = NnueEval::from_bytes(EMBEDDED_NET).expect("embedded NNUE net is invalid");
+    println!(
+        "info string NNUE {} loaded ({} bytes)",
+        DEFAULT_EVAL_FILE,
+        EMBEDDED_NET.len()
+    );
+    let mut search = Search::new(position, movegen, eval, nnue);
 
     Uci::main_loop(&mut search);
 }

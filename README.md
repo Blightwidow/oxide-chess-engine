@@ -1,8 +1,6 @@
-# Oxide Chess Bot
+# Oxide Chess Engine
 
-A UCI-compatible chess engine written in Rust. Single-threaded, no external dependencies beyond `arrayvec`.
-
-It does not come with a GUI. You can use a separate one like [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
+A UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
 
 ## Usage
 
@@ -19,6 +17,8 @@ cargo build -r
 ./target/release/oxide <command>
 ```
 
+The binary is fully self-contained — the NNUE network is embedded at compile time, no external files needed.
+
 ### Benchmark
 
 ```bash
@@ -26,30 +26,18 @@ cargo run -r -- bench              # Default: depth 13, 16 MB hash
 cargo run -r -- bench 32 1 15      # Custom: 32 MB hash, 1 thread, depth 15
 ```
 
-## Testing
+### UCI Options
 
-```bash
-cargo test                  # Unit tests
-cargo clippy                # Lint
-```
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `Hash` | spin | 16 | Transposition table size in MB (1-512) |
+| `EvalFile` | string | `<embedded>` | Load a different NNUE net at runtime |
 
-### SPRT Testing (strength regression)
+It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
 
-```bash
-cargo build -r --target-dir=base   # Build baseline
-# Make changes...
-cargo build -r                     # Build new version
-./bin/fastchess \
-    -engine cmd=./target/release/oxide name="vX.X.X" \
-    -engine cmd=./base/release/oxide name="vY.Y.Y" \
-    -pgnout file="./games/vX.X.X-vY.Y.Y.pgn" \
-    -openings file=./data/openings.pgn format=pgn order=random \
-    -each tc=8+0.08 \
-    -rounds 5000 -repeat \
-    -concurrency 8 \
-    -recover \
-    -sprt elo0=0 elo1=10 alpha=0.05 beta=0.1
-```
+## Performance
+
+*Coming soon — results will be added once trained nets are available.*
 
 ## Features
 
@@ -80,13 +68,16 @@ cargo build -r                     # Build new version
 
 ### Evaluation
 
-* NNUE evaluation support (768→256×2→32→1 architecture, integer arithmetic)
-* Handcrafted fallback: tapered evaluation (middlegame/endgame interpolation by game phase)
-* Piece-square tables (separate MG and EG)
-* Material values tuned for MG and EG
-* Pawn structure: doubled, isolated, and passed pawn evaluation
-* Bishop pair bonus
-* Rook on open and semi-open file bonus
+* NNUE evaluation (768->256x2->32->1 SCReLU architecture, integer quantized)
+* Embedded net via `include_bytes!` — no external files at runtime
+* Runtime net loading via `EvalFile` UCI option for SPRT testing
+
+### NNUE Net Management
+
+Nets use SHA256-based naming: `nn-{first 12 hex chars}.nnue`. Only the active (promoted) net is committed to git; all others are gitignored.
+
+* `scripts/convert_checkpoints.sh` — converts training checkpoints to `.nnue` format
+* `scripts/promote_net.sh <path>` — promotes a net as the new embedded default
 
 ## Documentation
 

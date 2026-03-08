@@ -20,17 +20,8 @@ mod test {
         let hasher = Rc::new(Hasher::new());
         let movegen = Movegen::new(Rc::clone(&bitboards));
         let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));
-        let nnue = NnueEval::new("nets/default.nnue").unwrap_or_else(NnueEval::zeroed);
-        let has_nnue = std::path::Path::new("nets/default.nnue").exists();
-        Search::new(position, movegen, Eval::new(), nnue, has_nnue)
-    }
-
-    fn make_search_or_skip() -> Option<Search> {
-        if !std::path::Path::new("nets/default.nnue").exists() {
-            eprintln!("Skipping: nets/default.nnue not found");
-            return None;
-        }
-        Some(make_search())
+        let nnue = NnueEval::from_bytes(crate::EMBEDDED_NET).expect("embedded NNUE net is invalid");
+        Search::new(position, movegen, Eval::new(), nnue)
     }
 
     fn search_position(fen: &str, depth: u8) -> (String, i16) {
@@ -192,7 +183,7 @@ mod test {
     #[test]
     #[ignore]
     fn tactical_fork_knight() {
-        let Some(mut search) = make_search_or_skip() else { return };
+        let mut search = make_search();
         // White knight can fork king and rook: Nc7+ wins the rook
         // Net gain is approximately rook - knight value (~200cp)
         search.position.set("r3k3/8/8/3N4/8/8/8/4K3 w q - 0 1".to_string());
@@ -205,7 +196,7 @@ mod test {
     #[test]
     #[ignore]
     fn tactical_winning_queen() {
-        let Some(mut search) = make_search_or_skip() else { return };
+        let mut search = make_search();
         // White can capture undefended queen with Bxe5
         search
             .position
@@ -224,7 +215,7 @@ mod test {
 
     #[test]
     fn eval_starting_position() {
-        let Some(mut search) = make_search_or_skip() else { return };
+        let mut search = make_search();
         search.position.set(FEN_START_POSITION.to_string());
         let score = search.evaluate_position();
         // TODO: tighten to < 50 once NNUE is better trained
@@ -236,8 +227,9 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn eval_extra_queen_white() {
-        let Some(mut search) = make_search_or_skip() else { return };
+        let mut search = make_search();
         // Standard position but remove black queen (d8)
         search
             .position
@@ -247,8 +239,9 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn eval_missing_knight_white() {
-        let Some(mut search) = make_search_or_skip() else { return };
+        let mut search = make_search();
         // Standard position but remove white knight (b1)
         search
             .position

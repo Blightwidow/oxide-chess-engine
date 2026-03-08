@@ -50,13 +50,11 @@ pub struct Search {
     lmr_table: [[u8; 64]; 128],
     /// Countdown until next time check (avoids calling Instant::now() every node)
     nodes_until_check: usize,
-    /// Whether a real NNUE network is loaded (vs zeroed fallback)
-    has_nnue: bool,
 }
 
 impl Search {
     /// Initialize search with precomputed LMR table.
-    pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: NnueEval, has_nnue: bool) -> Self {
+    pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: NnueEval) -> Self {
         // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2
         let mut lmr_table = [[0u8; 64]; 128];
         for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
@@ -78,7 +76,6 @@ impl Search {
             history: [[0; 64]; 64],
             lmr_table,
             nodes_until_check: CHECK_INTERVAL,
-            has_nnue,
         };
         search.position.set(FEN_START_POSITION.to_string());
 
@@ -92,11 +89,6 @@ impl Search {
         if limits.perft > 0 {
             let nodes = self.perft(limits.perft, true);
             println!("\nNodes searched: {}\n", nodes);
-            return;
-        }
-
-        if !self.has_nnue {
-            println!("info string Error: NNUE weights not loaded, cannot search. Load weights with 'setoption name EvalFile value <path>'");
             return;
         }
 
@@ -146,9 +138,9 @@ impl Search {
 
     /// Load or replace the NNUE network from a file path.
     pub fn load_nnue(&mut self, path: &str) {
-        if let Some(nnue) = NnueEval::new(path) {
+        if let Some(nnue) = NnueEval::load(path) {
+            println!("info string NNUE file {} loaded", path);
             self.nnue = nnue;
-            self.has_nnue = true;
         } else {
             println!("info string Failed to load NNUE net: {}", path);
         }

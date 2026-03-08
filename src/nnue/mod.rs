@@ -11,13 +11,18 @@ pub struct NnueEval {
 }
 
 impl NnueEval {
-    pub fn new(path: &str) -> Option<Self> {
-        let network = Network::load(path)?;
-        println!("info string NNUE evaluation using {}", path);
+    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        let network = Network::from_bytes(data)?;
         Some(Self { network })
     }
 
+    pub fn load(path: &str) -> Option<Self> {
+        let data = std::fs::read(path).ok()?;
+        Self::from_bytes(&data)
+    }
+
     /// Create an NNUE evaluator with zero weights (returns 0 for all positions).
+    #[cfg(test)]
     pub fn zeroed() -> Self {
         Self {
             network: Network::zeroed(),

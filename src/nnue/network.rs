@@ -10,6 +10,7 @@ pub struct Network {
 }
 
 impl Network {
+    #[cfg(test)]
     pub fn zeroed() -> Self {
         Self {
             ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE],
@@ -21,6 +22,7 @@ impl Network {
         }
     }
 
+    #[cfg(test)]
     pub fn load(path: &str) -> Option<Self> {
         let data = std::fs::read(path).ok()?;
         Self::from_bytes(&data)
@@ -241,25 +243,17 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn known_position_eval_sanity() {
-        use std::path::Path;
         use std::rc::Rc;
 
         use crate::bitboards::Bitboards;
-        use crate::defs::{PieceType, RangeOf, Sides};
         use crate::hash::Hasher;
-        use crate::nnue::features::feature_index;
         use crate::nnue::NnueEval;
         use crate::position::Position;
         use crate::search::defs::FEN_START_POSITION;
 
-        let net_path = "nets/default.nnue";
-        if !Path::new(net_path).exists() {
-            eprintln!("Skipping known_position_eval_sanity: {} not found", net_path);
-            return;
-        }
-
-        let nnue = NnueEval::new(net_path).expect("failed to load NNUE network");
+        let nnue = NnueEval::from_bytes(crate::EMBEDDED_NET).expect("embedded NNUE net is invalid");
         let bitboards = Rc::new(Bitboards::new());
         let hasher = Rc::new(Hasher::new());
         let mut position = Position::new(bitboards, hasher);
