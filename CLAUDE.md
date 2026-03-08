@@ -85,5 +85,6 @@ Current search features (see `docs/search.md` for details):
 
 - Rust 2021 edition, single dependency: `arrayvec`
 - `rustfmt.toml`: `max_width = 120`
+- Run `cargo fmt` after changes to format code
 - Run `cargo clippy` before committing
 - Sub-module definitions go in `defs.rs` files, not inline

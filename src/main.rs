@@ -32,7 +32,7 @@ fn main() {
         Some(nnue) => {
             println!("info string NNUE file {} loaded, evaluation enabled", DEFAULT_EVAL_FILE);
             (nnue, true)
-        },
+        }
         None => {
             eprintln!("info string NNUE file not found, evaluation disabled");
             (NnueEval::zeroed(), false)
