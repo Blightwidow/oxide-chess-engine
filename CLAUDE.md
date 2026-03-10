@@ -5,10 +5,11 @@ UCI-compatible chess engine written in Rust.
 ## Build & Run
 
 ```bash
-cargo build -r              # Release build
-cargo run -r -- <command>   # Run directly (e.g. `cargo run -r -- bench`)
-cargo test                  # Run tests
-cargo clippy                # Lint
+cargo build -r                                          # Release build (native CPU by default via .cargo/config.toml)
+RUSTFLAGS="" cargo build -r                             # Release build (generic x86-64, for distribution)
+cargo run -r -- <command>                               # Run directly (e.g. `cargo run -r -- bench`)
+cargo test                                              # Run tests
+cargo clippy                                            # Lint
 ```
 
 ### SPRT Testing (engine strength regression)

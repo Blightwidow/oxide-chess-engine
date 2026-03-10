@@ -1,9 +1,11 @@
 use super::defs::*;
 
 pub struct Network {
-    pub ft_weights: Vec<[i16; HIDDEN_SIZE]>,
+    pub ft_weights: Box<[[i16; HIDDEN_SIZE]; FEATURE_SIZE]>,
     pub ft_biases: [i16; HIDDEN_SIZE],
-    pub l1_weights: Vec<[i16; L1_SIZE]>,
+    /// Transposed L1 weights: stored as [L1_SIZE][HIDDEN_SIZE * 2] for cache-friendly access.
+    /// File format uses [HIDDEN_SIZE * 2][L1_SIZE]; transposition happens at load time.
+    pub l1_weights: [[i16; HIDDEN_SIZE * 2]; L1_SIZE],
     pub l1_biases: [i16; L1_SIZE],
     pub l2_weights: [i16; L1_SIZE],
     pub l2_bias: i16,
@@ -45,22 +47,27 @@ impl Network {
             val
         };
 
-        let mut ft_weights = vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE];
-        for row in ft_weights.iter_mut() {
-            for val in row.iter_mut() {
-                *val = read_i16(&mut offset);
+        let ft_weights: Box<[[i16; HIDDEN_SIZE]; FEATURE_SIZE]> = {
+            let mut v = vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE];
+            for row in v.iter_mut() {
+                for val in row.iter_mut() {
+                    *val = read_i16(&mut offset);
+                }
             }
-        }
+            v.into_boxed_slice().try_into().ok()?
+        };
 
         let mut ft_biases = [0i16; HIDDEN_SIZE];
         for val in ft_biases.iter_mut() {
             *val = read_i16(&mut offset);
         }
 
-        let mut l1_weights = vec![[0i16; L1_SIZE]; HIDDEN_SIZE * 2];
-        for row in l1_weights.iter_mut() {
-            for val in row.iter_mut() {
-                *val = read_i16(&mut offset);
+        // Read L1 weights in file format [HIDDEN_SIZE*2][L1_SIZE] and transpose to [L1_SIZE][HIDDEN_SIZE*2]
+        let mut l1_weights = [[0i16; HIDDEN_SIZE * 2]; L1_SIZE];
+        #[allow(clippy::needless_range_loop)]
+        for row in 0..HIDDEN_SIZE * 2 {
+            for col in 0..L1_SIZE {
+                l1_weights[col][row] = read_i16(&mut offset);
             }
         }
 
@@ -94,28 +101,33 @@ impl Network {
     /// SCReLU squares values, creating QA²-scale intermediates. We divide by QA after each
     /// dot product to keep values at QA*QB scale, then divide by QB for the next SCReLU.
     /// Uses i64 accumulation to avoid overflow from squared values × 512 inputs.
+    #[inline(always)]
     pub fn forward(&self, our_acc: &[i16; HIDDEN_SIZE], their_acc: &[i16; HIDDEN_SIZE]) -> i16 {
         let qa = QA as i64;
         let qb = QB as i64;
 
-        // Layer 1: SCReLU(accumulator) -> L1_SIZE with SCReLU
+        // Pre-compute SCReLU activations once (not 32× per neuron)
+        let mut activated = [0i32; HIDDEN_SIZE * 2];
+        for (j, &val) in our_acc.iter().enumerate() {
+            let c = val.clamp(0, QA as i16) as i32;
+            activated[j] = c * c;
+        }
+        for (j, &val) in their_acc.iter().enumerate() {
+            let c = val.clamp(0, QA as i16) as i32;
+            activated[HIDDEN_SIZE + j] = c * c;
+        }
+
+        // L1: simple dot product per neuron (auto-vectorizable)
         let mut l1 = [0i32; L1_SIZE];
         for (i, l1_val) in l1.iter_mut().enumerate() {
             let mut sum = 0i64;
-            for (j, &acc_val) in our_acc.iter().enumerate() {
-                let c = acc_val.clamp(0, QA as i16) as i64;
-                sum += c * c * self.l1_weights[j][i] as i64;
+            let weights = &self.l1_weights[i];
+            for j in 0..HIDDEN_SIZE * 2 {
+                sum += activated[j] as i64 * weights[j] as i64;
             }
-            for (j, &acc_val) in their_acc.iter().enumerate() {
-                let c = acc_val.clamp(0, QA as i16) as i64;
-                sum += c * c * self.l1_weights[HIDDEN_SIZE + j][i] as i64;
-            }
-            // sum at QA²·QB, divide by QA → QA·QB, add bias (at QA·QB)
             let val = sum / qa + self.l1_biases[i] as i64;
-            // Divide by QB → QA scale, clamp to [0, QA], square for SCReLU
-            let clamped = (val / qb) as i32;
-            let clamped = clamped.clamp(0, QA);
-            *l1_val = clamped * clamped; // SCReLU: [0, QA²]
+            let clamped = (val / qb).clamp(0, qa) as i32;
+            *l1_val = clamped * clamped;
         }
 
         // Layer 2: L1_SIZE -> 1
@@ -131,6 +143,7 @@ impl Network {
     }
 
     /// Serialize network weights to binary format.
+    /// Writes L1 weights in original [HIDDEN_SIZE*2][L1_SIZE] layout for file compatibility.
     #[cfg(test)]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
@@ -141,7 +154,7 @@ impl Network {
         data.extend_from_slice(&(HIDDEN_SIZE as u32).to_le_bytes());
         data.extend_from_slice(&(L1_SIZE as u32).to_le_bytes());
 
-        for row in &self.ft_weights {
+        for row in self.ft_weights.iter() {
             for &val in row {
                 data.extend_from_slice(&val.to_le_bytes());
             }
@@ -151,9 +164,10 @@ impl Network {
             data.extend_from_slice(&val.to_le_bytes());
         }
 
-        for row in &self.l1_weights {
-            for &val in row {
-                data.extend_from_slice(&val.to_le_bytes());
+        // Write in original [HIDDEN_SIZE*2][L1_SIZE] layout (un-transpose)
+        for row in 0..HIDDEN_SIZE * 2 {
+            for col in 0..L1_SIZE {
+                data.extend_from_slice(&self.l1_weights[col][row].to_le_bytes());
             }
         }
 
@@ -177,9 +191,12 @@ mod test {
 
     fn zero_network() -> Network {
         Network {
-            ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE],
+            ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap(),
             ft_biases: [0i16; HIDDEN_SIZE],
-            l1_weights: vec![[0i16; L1_SIZE]; HIDDEN_SIZE * 2],
+            l1_weights: [[0i16; HIDDEN_SIZE * 2]; L1_SIZE],
             l1_biases: [0i16; L1_SIZE],
             l2_weights: [0i16; L1_SIZE],
             l2_bias: 0,

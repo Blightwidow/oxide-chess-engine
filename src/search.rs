@@ -322,7 +322,7 @@ impl Search {
         }
 
         let mut move_scores: Vec<(Move, Option<i16>)> = Vec::new();
-        let mut best_move: Option<Move> = None;
+        let mut best_move: Option<Move> = moves.first().copied();
         let mut best_score_overall: i16 = -VALUE_INFINITE;
 
         for current_depth in 1..=max_depth {
@@ -360,7 +360,9 @@ impl Search {
 
                 for &mv in sorted_moves.iter() {
                     self.do_move_nnue(mv);
-                    let score = self.alpha_beta(current_depth - 1, -beta, -alpha, 1, true).map(|s| -s);
+                    let score = self
+                        .alpha_beta(current_depth - 1, -beta, -alpha, 1, true, Move::none())
+                        .map(|s| -s);
                     self.undo_move_nnue(mv);
 
                     move_scores.push((mv, score));
@@ -501,7 +503,15 @@ impl Search {
     ///      - LMR: reduce quiet late moves, re-search at full depth on fail-high
     ///   5. Beta cutoff → update killers/history, store TT as LowerBound
     ///   6. After loop → store TT as Exact (alpha improved) or UpperBound
-    fn alpha_beta(&mut self, depth: u8, mut alpha: i16, beta: i16, ply: usize, allow_null: bool) -> Option<i16> {
+    fn alpha_beta(
+        &mut self,
+        depth: u8,
+        mut alpha: i16,
+        beta: i16,
+        ply: usize,
+        allow_null: bool,
+        excluded_move: Move,
+    ) -> Option<i16> {
         if self.check_time() {
             return None;
         }
@@ -573,7 +583,8 @@ impl Search {
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             tt_move = entry.best_move;
             // Skip TT cutoffs at PV nodes to avoid truncating the principal variation
-            if !is_pv && entry.depth >= depth {
+            // Also skip when we have an excluded move (singular extension verification)
+            if !is_pv && excluded_move == Move::none() && entry.depth >= depth {
                 let tt_value = adjust_mate_score_from_tt(entry.value, ply);
                 match entry.node_type {
                     NodeType::Exact => return Some(tt_value),
@@ -591,9 +602,45 @@ impl Search {
             }
         }
 
+        // Singular Extensions
+        // If the TT move appears uniquely good, extend its search by 1 ply.
+        let mut extension: i8 = 0;
+        if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
+            if !is_pv
+                && ply > 0
+                && depth >= 10
+                && !self.time.should_stop_soft()
+                && excluded_move == Move::none()
+                && entry.depth >= depth - 3
+                && entry.best_move != Move::none()
+                && (entry.node_type == NodeType::LowerBound || entry.node_type == NodeType::Exact)
+                && adjust_mate_score_from_tt(entry.value, ply).abs() < VALUE_MATE - 100
+            {
+                let tt_value = adjust_mate_score_from_tt(entry.value, ply);
+                let se_beta = tt_value - (depth as i16) * 2;
+                let se_depth = (depth - 1) / 2;
+
+                let score = self.alpha_beta(se_depth, se_beta - 1, se_beta, ply, false, entry.best_move);
+
+                match score {
+                    Some(s) if s < se_beta => {
+                        extension = 1; // TT move is singular → extend
+                    }
+                    Some(s) if s >= beta => {
+                        return Some(s); // Multi-cut: multiple moves beat beta → prune
+                    }
+                    None => return None,
+                    _ => {}
+                }
+            }
+        }
+
         // Check extension
         let in_check = self.position.checkers_bb(self.position.side_to_move) != 0;
-        let search_depth = if in_check { depth + 1 } else { depth };
+        if in_check {
+            extension = extension.max(1);
+        }
+        let search_depth = (depth as i8 + extension) as u8;
 
         if search_depth == 0 {
             return self.quiescence(alpha, beta, ply);
@@ -614,7 +661,7 @@ impl Search {
 
                 self.do_null_move_nnue();
                 let score = self
-                    .alpha_beta(reduced_depth, -beta, -beta + 1, ply + 1, false)
+                    .alpha_beta(reduced_depth, -beta, -beta + 1, ply + 1, false, Move::none())
                     .map(|s| -s);
                 self.undo_null_move_nnue();
 
@@ -690,6 +737,12 @@ impl Search {
             scored_moves.swap(i, best_idx);
 
             let mv = scored_moves[i].0;
+
+            // Skip excluded move (used by singular extension verification search)
+            if mv == excluded_move {
+                continue;
+            }
+
             let move_score = scored_moves[i].1;
 
             // Check capture/promotion before do_move since board changes
@@ -733,7 +786,7 @@ impl Search {
             if moves_searched == 0 {
                 // First move (expected best): search with full alpha-beta window
                 score = self
-                    .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true)
+                    .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true, Move::none())
                     .map(|s| -s);
             } else {
                 // Late Move Reductions (LMR): reduce quiet late moves by a logarithmic
@@ -751,14 +804,21 @@ impl Search {
 
                 // Step 1: Null-window search (possibly at reduced depth for LMR)
                 let mut s = self
-                    .alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true)
+                    .alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true, Move::none())
                     .map(|s| -s);
 
                 // Step 2: LMR re-search — if reduced search beat alpha, try full depth
                 if let Some(val) = s {
                     if val > alpha && reduction > 0 {
                         s = self
-                            .alpha_beta(search_depth - 1, (-alpha).saturating_sub(1), -alpha, ply + 1, true)
+                            .alpha_beta(
+                                search_depth - 1,
+                                (-alpha).saturating_sub(1),
+                                -alpha,
+                                ply + 1,
+                                true,
+                                Move::none(),
+                            )
                             .map(|s| -s);
                     }
                 }
@@ -768,7 +828,7 @@ impl Search {
                 if let Some(val) = s {
                     if val > alpha && val < beta {
                         s = self
-                            .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true)
+                            .alpha_beta(search_depth - 1, -beta, -alpha, ply + 1, true, Move::none())
                             .map(|s| -s);
                     }
                 }

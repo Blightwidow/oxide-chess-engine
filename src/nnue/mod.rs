@@ -94,6 +94,7 @@ impl NnueEval {
 
     /// Evaluate the position from the side-to-move's perspective.
     /// Reads from the top of the accumulator stack.
+    #[inline(always)]
     pub fn evaluate(&self, side_to_move: Side) -> i16 {
         let (white_acc, black_acc) = self.stack.last().unwrap();
 
