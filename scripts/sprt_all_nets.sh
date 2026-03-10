@@ -21,6 +21,52 @@ ELO1=5
 ALPHA=0.05
 BETA=0.05
 
+# Print summary of all previously tested nets and exit
+print_summary() {
+    echo "=========================================="
+    echo "  SPRT Test Summary (baseline: $(basename "$BASE_NET"))"
+    echo "=========================================="
+    echo ""
+
+    local p=0 f=0 inc=0
+
+    for logfile in "$NETS_DIR"/*.sprt.log; do
+        [ -f "$logfile" ] || continue
+
+        local net_name
+        net_name=$(basename "${logfile%.sprt.log}.nnue")
+
+        # Extract the last results block from the log
+        local elo games result_label
+        elo=$(grep "^Elo:" "$logfile" | tail -1 | sed 's/Elo: //')
+        games=$(grep "^Games:" "$logfile" | tail -1 | sed 's/Games: \([0-9]*\).*/\1/')
+
+        if grep -q "H1 was accepted" "$logfile"; then
+            result_label="PASSED"
+            p=$((p + 1))
+        elif grep -q "H0 was accepted" "$logfile"; then
+            result_label="FAILED"
+            f=$((f + 1))
+        else
+            result_label="INCOMP"
+            inc=$((inc + 1))
+        fi
+
+        printf "  %-8s  %-30s  %5s games  Elo: %s\n" "$result_label" "$net_name" "$games" "$elo"
+    done
+
+    echo ""
+    echo "------------------------------------------"
+    echo "  Totals: $p passed, $f failed, $inc incomplete"
+    echo "=========================================="
+}
+
+# If --summary is passed, just print summary and exit
+if [[ "${1:-}" == "--summary" ]]; then
+    print_summary
+    exit 0
+fi
+
 if [ ! -f "$BASE_NET" ]; then
     echo "Error: baseline net $BASE_NET not found."
     exit 1
@@ -36,6 +82,10 @@ if [ ! -f "$ENGINE" ]; then
     echo "Building engine..."
     cargo build -r
 fi
+
+# Print summary of previous results before starting new tests
+print_summary
+echo ""
 
 passed=0
 failed=0

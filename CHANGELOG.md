@@ -8,9 +8,26 @@ All notable changes to Oxide are documented in this file.
 
 - Replaced handcrafted evaluation with NNUE (768->256x2->32->1 SCReLU architecture, integer quantized)
 - Embedded net in binary via `include_bytes!` — single self-contained executable, no external files needed
+- Incremental NNUE accumulator updates (activate/deactivate on do/undo move) instead of full refresh per position
+- Pre-computed SCReLU activations and transposed L1 weights for cache-friendly forward pass
 - SHA256-based net naming (`nn-{hash12}.nnue`) for reproducibility
 - Runtime net loading via `setoption name EvalFile` for SPRT testing without recompiling
 - Removed tapered handcrafted eval: piece-square tables, pawn structure (doubled/isolated/passed), bishop pair bonus, rook on open file bonus, game phase interpolation
+
+### Search
+
+- Correction history: tracks static eval error keyed by pawn hash to improve pruning decisions
+- Mate score adjustment for TT storage (ply-relative to root-relative conversion)
+- Incremental NNUE-aware move wrappers (`do_move_nnue`, `undo_move_nnue`) for all search paths
+- Always complete at least depth 1 before checking soft time limit
+- Perft no longer requires NNUE weights (runs before search state reset)
+- Move ordering now uses dedicated SEE piece values instead of handcrafted middlegame values
+- Added documentation comments throughout the search module
+
+### Position
+
+- Added incremental pawn hash (Zobrist) for correction history indexing
+- Added `display()` for ASCII board rendering (used by `eval` command)
 
 ### Training Infrastructure
 
@@ -28,15 +45,11 @@ All notable changes to Oxide are documented in this file.
 - Added `EvalFile` UCI option for runtime net loading
 - Changed default hash size from 128 MB to 16 MB
 
-### Search
+### Build & CI
 
-- Perft no longer requires NNUE weights (runs before search state reset)
-- Move ordering now uses dedicated SEE piece values instead of handcrafted middlegame values
-- Added documentation comments throughout the search module
-
-### Position
-
-- Added `display()` for ASCII board rendering (used by `eval` command)
+- Release profile: LTO enabled, single codegen unit for maximum performance
+- Native CPU targeting via `.cargo/config.toml` (`target-cpu=native`)
+- GitHub Actions release workflow: builds for x86_64/aarch64 Linux, macOS, and x86_64 Windows on tag push
 
 ### Testing
 

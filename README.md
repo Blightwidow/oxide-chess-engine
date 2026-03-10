@@ -39,7 +39,19 @@ It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or
 
 ## Performance
 
-*Coming soon — results will be added once trained nets are available.*
+On a benchmark of 46 positions search at depth 13:
+
+```
+Total time (ms) : 61047
+Nodes searched  : 46575003
+Nodes/second    : 762936
+```
+
+and for pure perft on 1 thread without any movegen hashing:
+
+```
+Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
+```
 
 ## Features
 
@@ -56,6 +68,8 @@ It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or
 * Iterative deepening with aspiration windows
 * Principal Variation Search (PVS)
 * Transposition table with best move, depth, and node type
+* Mate score adjustment for TT storage
+* Correction history (pawn-hash indexed static eval error tracking)
 * Quiescence search (captures, en passant, promotions)
 * Check extensions
 * Null move pruning
@@ -71,6 +85,8 @@ It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or
 ### Evaluation
 
 * NNUE evaluation (768->256x2->32->1 SCReLU architecture, integer quantized)
+* Incremental accumulator updates (push/pop with activate/deactivate per move)
+* Optimized forward pass: pre-computed SCReLU activations, transposed L1 weights
 * Embedded net via `include_bytes!` — no external files at runtime
 * Runtime net loading via `EvalFile` UCI option for SPRT testing
 

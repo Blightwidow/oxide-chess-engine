@@ -81,6 +81,12 @@ pub struct Search {
     /// Correction history: tracks static eval error keyed by [side][pawn_hash % SIZE].
     /// Values are stored in fixed-point (scaled by CORRECTION_GRAIN).
     correction_history: Box<[[i32; CORRECTION_HISTORY_SIZE]; 2]>,
+    /// Static eval at each ply, used to compute the "improving" flag
+    static_eval_stack: [i16; MAX_PLY],
+    /// Countermove table: [from_sq][to_sq] → the move that refuted it
+    countermoves: [[Move; 64]; 64],
+    /// Previous move played (for countermove heuristic)
+    prev_move: Move,
 }
 
 impl Search {
@@ -108,6 +114,9 @@ impl Search {
             lmr_table,
             nodes_until_check: CHECK_INTERVAL,
             correction_history: Box::new([[0i32; CORRECTION_HISTORY_SIZE]; 2]),
+            static_eval_stack: [0i16; MAX_PLY],
+            countermoves: [[Move::none(); 64]; 64],
+            prev_move: Move::none(),
         };
         search.position.set(FEN_START_POSITION.to_string());
         search.nnue.refresh(&search.position);
@@ -130,6 +139,9 @@ impl Search {
         self.seldepth = 0;
         self.killers = [[Move::none(); 2]; MAX_PLY];
         self.history = [[0; 64]; 64];
+        self.countermoves = [[Move::none(); 64]; 64];
+        self.prev_move = Move::none();
+        self.static_eval_stack = [0i16; MAX_PLY];
         self.nodes_until_check = CHECK_INTERVAL;
 
         self.time = TimeManager::new(
@@ -324,6 +336,8 @@ impl Search {
         let mut move_scores: Vec<(Move, Option<i16>)> = Vec::new();
         let mut best_move: Option<Move> = moves.first().copied();
         let mut best_score_overall: i16 = -VALUE_INFINITE;
+        let mut prev_best_move = Move::none();
+        let mut stability_count: u32 = 0;
 
         for current_depth in 1..=max_depth {
             if current_depth > 1 && self.time.should_stop_soft() {
@@ -404,6 +418,16 @@ impl Search {
             }
 
             if let Some(mv) = current_best_move {
+                // Best-move stability: scale soft time limit based on how stable the best move is
+                if mv == prev_best_move {
+                    stability_count += 1;
+                } else {
+                    stability_count = 0;
+                }
+                prev_best_move = mv;
+                let factor = 0.5 + 0.8 * (1.0 - (stability_count as f64 / 5.0).min(1.0));
+                self.time.scale_soft_limit(factor);
+
                 best_move = Some(mv);
                 best_score_overall = best_score;
                 let elapsed_ms = self.start_time.elapsed().as_millis().max(1) as usize;
@@ -446,7 +470,7 @@ impl Search {
     /// Assign a score to a move for ordering. Higher = searched first.
     /// Priority: TT move (1M) > captures via MVV-LVA (100K+) > promotions (100K+)
     ///         > killer #1 (90K) > killer #2 (80K) > history heuristic.
-    fn score_move(&self, mv: Move, tt_move: Move, ply: usize) -> i32 {
+    fn score_move(&self, mv: Move, tt_move: Move, ply: usize, prev_move: Move) -> i32 {
         // TT move gets highest priority
         if mv == tt_move && tt_move != Move::none() {
             return 1_000_000;
@@ -481,6 +505,11 @@ impl Search {
             if mv == self.killers[ply][1] {
                 return 80_000;
             }
+        }
+
+        // Countermove heuristic
+        if prev_move != Move::none() && mv == self.countermoves[prev_move.from_sq()][prev_move.to_sq()] {
+            return 70_000;
         }
 
         // History heuristic
@@ -642,9 +671,28 @@ impl Search {
         }
         let search_depth = (depth as i8 + extension) as u8;
 
+        // Internal Iterative Reductions (IIR): reduce depth when no TT move guides ordering.
+        // The TT gets populated for future iterations anyway.
+        let search_depth = if tt_move == Move::none() && search_depth >= 4 && !in_check {
+            search_depth - 1
+        } else {
+            search_depth
+        };
+
         if search_depth == 0 {
             return self.quiescence(alpha, beta, ply);
         }
+
+        // Static eval for pruning decisions, adjusted by correction history
+        let raw_static_eval = self.evaluate_position();
+        let static_eval =
+            (raw_static_eval as i32 + self.correction()).clamp(-VALUE_MATE as i32 + 1, VALUE_MATE as i32 - 1) as i16;
+
+        // Store static eval for improving detection
+        if ply < MAX_PLY {
+            self.static_eval_stack[ply] = static_eval;
+        }
+        let improving = !in_check && (2..MAX_PLY).contains(&ply) && static_eval > self.static_eval_stack[ply - 2];
 
         // Null Move Pruning (NMP)
         // Skip our turn and search with reduced depth. If opponent can't beat beta
@@ -656,7 +704,7 @@ impl Search {
                 & !self.position.by_type_bb[us][PieceType::PAWN]
                 & !self.position.by_type_bb[us][PieceType::KING];
             if non_pawn_material != 0 {
-                let r = 3 + (search_depth as usize / 4); // adaptive reduction: R = 3 + depth/4
+                let r = 3 + (search_depth as usize / 4) + (!improving as usize); // adaptive reduction
                 let reduced_depth = search_depth.saturating_sub(r as u8);
 
                 self.do_null_move_nnue();
@@ -673,16 +721,11 @@ impl Search {
             }
         }
 
-        // Static eval for pruning decisions, adjusted by correction history
-        let raw_static_eval = self.evaluate_position();
-        let static_eval =
-            (raw_static_eval as i32 + self.correction()).clamp(-VALUE_MATE as i32 + 1, VALUE_MATE as i32 - 1) as i16;
-
         // Reverse Futility Pruning (RFP)
-        // If static eval is far above beta (by 80*depth cp), assume no move will
+        // If static eval is far above beta (by margin*depth cp), assume no move will
         // drop the score below beta. Safe to prune the whole subtree.
         if !is_pv && !in_check && search_depth <= 7 && static_eval.abs() < VALUE_MATE - 100 {
-            let rfp_margin = 80 * (search_depth as i16);
+            let rfp_margin = (if improving { 80 } else { 65 }) * (search_depth as i16);
             if static_eval - rfp_margin >= beta {
                 return Some(static_eval);
             }
@@ -717,7 +760,7 @@ impl Search {
         // Score moves for ordering
         let mut scored_moves: Vec<(Move, i32)> = moves
             .iter()
-            .map(|&mv| (mv, self.score_move(mv, tt_move, ply)))
+            .map(|&mv| (mv, self.score_move(mv, tt_move, ply, self.prev_move)))
             .collect();
 
         let original_alpha = alpha;
@@ -750,7 +793,7 @@ impl Search {
             let move_type = mv.type_of();
             let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
             let is_promotion = move_type == MoveTypes::PROMOTION;
-            let is_killer = move_score == 90_000 || move_score == 80_000;
+            let is_killer = move_score == 90_000 || move_score == 80_000 || move_score == 70_000;
             let is_quiet = !is_capture && !is_promotion;
 
             // Futility Pruning: at low depth, skip quiet moves when static eval + margin
@@ -769,7 +812,7 @@ impl Search {
                 && is_quiet
                 && !is_killer
                 && search_depth <= 4
-                && moves_searched >= LMP_THRESHOLDS[search_depth as usize]
+                && moves_searched >= LMP_THRESHOLDS[search_depth as usize] + if improving { 2 } else { 0 }
             {
                 continue;
             }
@@ -780,6 +823,8 @@ impl Search {
             }
 
             self.do_move_nnue(mv);
+            let saved_prev_move = self.prev_move;
+            self.prev_move = mv;
 
             // ── PVS + LMR Search Logic ────────────────────────────────────────
             let score;
@@ -795,7 +840,14 @@ impl Search {
                     !in_check && !is_capture && !is_promotion && !is_killer && moves_searched >= 3 && search_depth >= 3;
 
                 let reduction = if do_lmr {
-                    self.lmr_table[search_depth as usize][moves_searched.min(63)]
+                    let mut r = self.lmr_table[search_depth as usize][moves_searched.min(63)] as i8;
+                    if !improving {
+                        r += 1;
+                    }
+                    // Reduce less for high-history moves, more for low-history
+                    let hist = self.history[mv.from_sq()][mv.to_sq()];
+                    r -= (hist / 5000).clamp(-1, 1) as i8;
+                    r.max(0).min((search_depth as i8) - 2) as u8
                 } else {
                     0
                 };
@@ -837,6 +889,7 @@ impl Search {
             }
 
             self.undo_move_nnue(mv);
+            self.prev_move = saved_prev_move;
 
             match score {
                 Some(score) => {
@@ -855,6 +908,10 @@ impl Search {
                             let bonus = (search_depth as i32) * (search_depth as i32);
                             let entry = &mut self.history[mv.from_sq()][mv.to_sq()];
                             *entry += bonus - bonus * (*entry).abs() / 16384;
+                            // Countermove heuristic
+                            if self.prev_move != Move::none() {
+                                self.countermoves[self.prev_move.from_sq()][self.prev_move.to_sq()] = mv;
+                            }
                         }
 
                         self.eval.transposition_table.store(
@@ -940,7 +997,7 @@ impl Search {
             let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
 
             if is_capture {
-                let score = self.score_move(mv, Move::none(), ply);
+                let score = self.score_move(mv, Move::none(), ply, Move::none());
                 scored_moves.push((mv, score));
             }
         }
