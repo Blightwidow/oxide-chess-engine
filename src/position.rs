@@ -23,6 +23,7 @@ pub struct Position {
     pub states: Vec<StateInfo>,
     pub castling_masks: [CastlingRight; NrOf::SQUARES],
     pub zobrist: u64,
+    pub pawn_hash: u64,
     bitboards: Rc<Bitboards>,
     hasher: Rc<Hasher>,
 }
@@ -40,6 +41,7 @@ impl Position {
             states: vec![StateInfo::new()],
             castling_masks: Position::castling_masks(),
             zobrist: 0u64,
+            pawn_hash: 0u64,
         }
     }
 
@@ -62,6 +64,7 @@ impl Position {
         };
         let mut new_state = *self.states.last().unwrap();
         new_state.zobrist = self.zobrist;
+        new_state.pawn_hash = self.pawn_hash;
 
         #[cfg(debug_assertions)]
         {
@@ -134,10 +137,16 @@ impl Position {
             self.zobrist ^= self
                 .hasher
                 .piece_key(color_of_piece(captured), type_of_piece(captured), captured_square);
+            // Pawn hash: remove captured pawn
+            if type_of_piece(captured) == PieceType::PAWN {
+                self.pawn_hash ^= self.hasher.pawn_keys[color_of_piece(captured)][captured_square];
+            }
         }
         if move_type == MoveTypes::PROMOTION {
             self.zobrist ^= self.hasher.piece_key(us, PieceType::PAWN, from);
             self.zobrist ^= self.hasher.piece_key(us, mv.promotion_type(), to);
+            // Pawn hash: remove promoted pawn
+            self.pawn_hash ^= self.hasher.pawn_keys[us][from];
         } else if move_type == MoveTypes::CASTLING {
             let king_side: bool = to > from;
             let rook_to: Square = match king_side {
@@ -155,6 +164,11 @@ impl Position {
         } else {
             self.zobrist ^= self.hasher.piece_key(us, type_of_piece(piece), from);
             self.zobrist ^= self.hasher.piece_key(us, type_of_piece(piece), to);
+            // Pawn hash: update for pawn moves
+            if type_of_piece(piece) == PieceType::PAWN {
+                self.pawn_hash ^= self.hasher.pawn_keys[us][from];
+                self.pawn_hash ^= self.hasher.pawn_keys[us][to];
+            }
         }
 
         // Toggle side
@@ -174,6 +188,7 @@ impl Position {
     pub fn do_null_move(&mut self) {
         let mut new_state = *self.states.last().unwrap();
         new_state.zobrist = self.zobrist;
+        new_state.pawn_hash = self.pawn_hash;
 
         // XOR out en passant from zobrist if any, set EP to NONE_SQUARE
         if new_state.en_passant_square != NONE_SQUARE {
@@ -194,6 +209,7 @@ impl Position {
     pub fn undo_null_move(&mut self) {
         let last_state = self.states.pop().unwrap();
         self.zobrist = last_state.zobrist;
+        self.pawn_hash = last_state.pawn_hash;
         self.side_to_move ^= 1;
     }
 
@@ -209,6 +225,7 @@ impl Position {
         let move_type: MoveType = mv.type_of();
         let last_state: StateInfo = self.states.pop().unwrap();
         self.zobrist = last_state.zobrist;
+        self.pawn_hash = last_state.pawn_hash;
 
         #[cfg(debug_assertions)]
         {
@@ -348,6 +365,7 @@ impl Position {
         self.states = vec![StateInfo::new()];
         self.castling_masks = Position::castling_masks();
         self.states = vec![StateInfo::new()];
+        self.pawn_hash = 0;
     }
 
     pub fn checkers_bb(&self, defending_side: Side) -> Bitboard {

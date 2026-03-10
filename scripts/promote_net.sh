@@ -69,7 +69,4 @@ echo "=== Net promoted ==="
 echo "Old: $OLD_NAME"
 echo "New: $NEW_NAME"
 echo ""
-echo "Staged changes:"
-git diff --cached --stat
-echo ""
 echo "Review and commit when ready."

@@ -75,12 +75,16 @@ impl Position {
             self.pinned_bb[side] = self.pinned_bb(side);
         }
 
-        // Compute initial Zobrist hash
+        // Compute initial Zobrist hash and pawn hash
         self.zobrist = 0;
+        self.pawn_hash = 0;
         for sq in RangeOf::SQUARES {
             let piece = self.board[sq];
             if piece != PieceType::NONE {
                 self.zobrist ^= self.hasher.piece_key(color_of_piece(piece), type_of_piece(piece), sq);
+                if type_of_piece(piece) == PieceType::PAWN {
+                    self.pawn_hash ^= self.hasher.pawn_keys[color_of_piece(piece)][sq];
+                }
             }
         }
         if self.side_to_move == Sides::BLACK {

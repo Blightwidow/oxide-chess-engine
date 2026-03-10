@@ -10,24 +10,6 @@ pub struct Network {
 }
 
 impl Network {
-    #[cfg(test)]
-    pub fn zeroed() -> Self {
-        Self {
-            ft_weights: vec![[0i16; HIDDEN_SIZE]; FEATURE_SIZE],
-            ft_biases: [0i16; HIDDEN_SIZE],
-            l1_weights: vec![[0i16; L1_SIZE]; HIDDEN_SIZE * 2],
-            l1_biases: [0i16; L1_SIZE],
-            l2_weights: [0i16; L1_SIZE],
-            l2_bias: 0,
-        }
-    }
-
-    #[cfg(test)]
-    pub fn load(path: &str) -> Option<Self> {
-        let data = std::fs::read(path).ok()?;
-        Self::from_bytes(&data)
-    }
-
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < 20 {
             return None;
@@ -243,7 +225,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn known_position_eval_sanity() {
         use std::rc::Rc;
 
@@ -253,14 +234,15 @@ mod test {
         use crate::position::Position;
         use crate::search::defs::FEN_START_POSITION;
 
-        let nnue = NnueEval::from_bytes(crate::EMBEDDED_NET).expect("embedded NNUE net is invalid");
+        let mut nnue = NnueEval::from_bytes(crate::EMBEDDED_NET).expect("embedded NNUE net is invalid");
         let bitboards = Rc::new(Bitboards::new());
         let hasher = Rc::new(Hasher::new());
         let mut position = Position::new(bitboards, hasher);
 
         // Test 1: starting position should be roughly balanced
         position.set(FEN_START_POSITION.to_string());
-        let eval = nnue.evaluate(&position);
+        nnue.refresh(&position);
+        let eval = nnue.evaluate(position.side_to_move);
         assert!(
             eval > -200 && eval < 200,
             "Starting position eval {} cp is out of expected range [-200, +200]",
@@ -270,7 +252,8 @@ mod test {
         // Test 2: white up a queen should be clearly positive
         // FEN: 4k3/8/8/8/8/8/8/4KQ2 w - - 0 1
         position.set("4k3/8/8/8/8/8/8/4KQ2 w - - 0 1".to_string());
-        let eval_queen_up = nnue.evaluate(&position);
+        nnue.refresh(&position);
+        let eval_queen_up = nnue.evaluate(position.side_to_move);
         assert!(
             eval_queen_up > 0,
             "White up a queen should be positive, got {} cp",
@@ -279,7 +262,8 @@ mod test {
 
         // Test 3: black up a queen (flip), eval from side-to-move (white) should be negative
         position.set("4kq2/8/8/8/8/8/8/4K3 w - - 0 1".to_string());
-        let eval_queen_down = nnue.evaluate(&position);
+        nnue.refresh(&position);
+        let eval_queen_down = nnue.evaluate(position.side_to_move);
         assert!(
             eval_queen_down < 0,
             "White down a queen should be negative, got {} cp",

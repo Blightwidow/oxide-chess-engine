@@ -23,6 +23,28 @@ use crate::{
 use self::defs::*;
 use crate::time::defs::CHECK_INTERVAL;
 
+/// Adjust a mate score for TT storage: convert ply-relative to root-relative.
+fn adjust_mate_score_to_tt(score: i16, ply: usize) -> i16 {
+    if score > VALUE_MATE - 100 {
+        score + ply as i16
+    } else if score < -VALUE_MATE + 100 {
+        score - ply as i16
+    } else {
+        score
+    }
+}
+
+/// Adjust a mate score from TT probe: convert root-relative back to ply-relative.
+fn adjust_mate_score_from_tt(score: i16, ply: usize) -> i16 {
+    if score > VALUE_MATE - 100 {
+        score - ply as i16
+    } else if score < -VALUE_MATE + 100 {
+        score + ply as i16
+    } else {
+        score
+    }
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const MAX_PLY: usize = 128;
@@ -30,6 +52,12 @@ const MAX_PLY: usize = 128;
 const LMP_THRESHOLDS: [usize; 5] = [0, 3, 6, 10, 15];
 /// Piece values used by Static Exchange Evaluation (SEE)
 const SEE_VALUES: [i16; 7] = [0, 100, 300, 300, 500, 900, 20000];
+/// Number of entries in the correction history table (per side)
+const CORRECTION_HISTORY_SIZE: usize = 16384;
+/// Maximum absolute correction value (centipawns * CORRECTION_GRAIN)
+const CORRECTION_MAX: i32 = 256 * 32;
+/// Granularity for correction history values (fixed-point scaling)
+const CORRECTION_GRAIN: i32 = 256;
 
 // ─── Search State ────────────────────────────────────────────────────────────
 
@@ -50,6 +78,9 @@ pub struct Search {
     lmr_table: [[u8; 64]; 128],
     /// Countdown until next time check (avoids calling Instant::now() every node)
     nodes_until_check: usize,
+    /// Correction history: tracks static eval error keyed by [side][pawn_hash % SIZE].
+    /// Values are stored in fixed-point (scaled by CORRECTION_GRAIN).
+    correction_history: Box<[[i32; CORRECTION_HISTORY_SIZE]; 2]>,
 }
 
 impl Search {
@@ -76,8 +107,10 @@ impl Search {
             history: [[0; 64]; 64],
             lmr_table,
             nodes_until_check: CHECK_INTERVAL,
+            correction_history: Box::new([[0i32; CORRECTION_HISTORY_SIZE]; 2]),
         };
         search.position.set(FEN_START_POSITION.to_string());
+        search.nnue.refresh(&search.position);
 
         search
     }
@@ -133,7 +166,7 @@ impl Search {
     }
 
     fn evaluate_position(&self) -> i16 {
-        self.nnue.evaluate(&self.position)
+        self.nnue.evaluate(self.position.side_to_move)
     }
 
     /// Load or replace the NNUE network from a file path.
@@ -141,9 +174,94 @@ impl Search {
         if let Some(nnue) = NnueEval::load(path) {
             println!("info string NNUE file {} loaded", path);
             self.nnue = nnue;
+            self.nnue.refresh(&self.position);
         } else {
             println!("info string Failed to load NNUE net: {}", path);
         }
+    }
+
+    // ─── NNUE-Aware Move Wrappers ─────────────────────────────────────────────
+
+    /// Apply a move with incremental NNUE accumulator updates.
+    fn do_move_nnue(&mut self, mv: Move) {
+        let us = self.position.side_to_move;
+        let them = us ^ 1;
+        let from = mv.from_sq();
+        let to = mv.to_sq();
+        let piece = self.position.board[from];
+        let piece_type = type_of_piece(piece);
+        let move_type = mv.type_of();
+        let captured = if move_type == MoveTypes::EN_PASSANT {
+            self.position.board[(to as isize - pawn_push(us)) as usize]
+        } else if move_type == MoveTypes::CASTLING {
+            PieceType::NONE
+        } else {
+            self.position.board[to]
+        };
+
+        self.nnue.push();
+        self.position.do_move(mv);
+
+        match move_type {
+            MoveTypes::CASTLING => {
+                let king_side = to > from;
+                let rook_to = if king_side { to - 2 } else { to + 3 };
+                let king_to = if king_side { from + 2 } else { from - 2 };
+
+                self.nnue.deactivate(us, PieceType::KING, from);
+                self.nnue.deactivate(us, PieceType::ROOK, to); // rook_from = to in move encoding
+                self.nnue.activate(us, PieceType::KING, king_to);
+                self.nnue.activate(us, PieceType::ROOK, rook_to);
+            }
+            MoveTypes::PROMOTION => {
+                let promo_type = mv.promotion_type();
+                self.nnue.deactivate(us, PieceType::PAWN, from);
+                if captured != PieceType::NONE {
+                    self.nnue.deactivate(them, type_of_piece(captured), to);
+                }
+                self.nnue.activate(us, promo_type, to);
+            }
+            MoveTypes::EN_PASSANT => {
+                let captured_sq = (to as isize - pawn_push(us)) as usize;
+                self.nnue.deactivate(us, PieceType::PAWN, from);
+                self.nnue.deactivate(them, PieceType::PAWN, captured_sq);
+                self.nnue.activate(us, PieceType::PAWN, to);
+            }
+            _ => {
+                // Normal move
+                self.nnue.deactivate(us, piece_type, from);
+                if captured != PieceType::NONE {
+                    self.nnue.deactivate(them, type_of_piece(captured), to);
+                }
+                self.nnue.activate(us, piece_type, to);
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        self.nnue.verify(&self.position);
+    }
+
+    /// Undo a move and pop the NNUE accumulator.
+    fn undo_move_nnue(&mut self, mv: Move) {
+        self.position.undo_move(mv);
+        self.nnue.pop();
+    }
+
+    /// Apply null move with NNUE push (no feature changes).
+    fn do_null_move_nnue(&mut self) {
+        self.nnue.push();
+        self.position.do_null_move();
+    }
+
+    /// Undo null move and pop the NNUE accumulator.
+    fn undo_null_move_nnue(&mut self) {
+        self.position.undo_null_move();
+        self.nnue.pop();
+    }
+
+    /// Public method for making a move with NNUE updates (used by UCI move replay).
+    pub fn make_move(&mut self, mv: Move) {
+        self.do_move_nnue(mv);
     }
 
     // ─── Perft ────────────────────────────────────────────────────────────────
@@ -208,7 +326,7 @@ impl Search {
         let mut best_score_overall: i16 = -VALUE_INFINITE;
 
         for current_depth in 1..=max_depth {
-            if self.time.should_stop_soft() {
+            if current_depth > 1 && self.time.should_stop_soft() {
                 break;
             }
 
@@ -235,21 +353,17 @@ impl Search {
                 (-VALUE_INFINITE, VALUE_INFINITE)
             };
 
-            let mut failed = 0u8; // track re-search attempts
-
             loop {
                 best_score = -VALUE_INFINITE;
                 current_best_move = None;
+                move_scores.clear();
 
                 for &mv in sorted_moves.iter() {
-                    self.position.do_move(mv);
+                    self.do_move_nnue(mv);
                     let score = self.alpha_beta(current_depth - 1, -beta, -alpha, 1, true).map(|s| -s);
-                    self.position.undo_move(mv);
+                    self.undo_move_nnue(mv);
 
-                    // Only update move_scores on first attempt (or when we have none)
-                    if failed == 0 {
-                        move_scores.push((mv, score));
-                    }
+                    move_scores.push((mv, score));
 
                     match score {
                         Some(score) => {
@@ -266,30 +380,20 @@ impl Search {
                 }
 
                 // Check if we need to re-search with wider window
-                if current_best_move.is_some() && failed < 2 {
+                if current_best_move.is_some() {
                     if best_score <= alpha {
                         // Fail low - widen alpha
-                        alpha = if failed == 0 {
-                            alpha.saturating_sub(100)
-                        } else {
-                            -VALUE_INFINITE
-                        };
-                        failed += 1;
-                        if failed == 1 {
-                            move_scores.clear();
+                        alpha = alpha.saturating_sub(100);
+                        if alpha <= -VALUE_INFINITE + 100 {
+                            alpha = -VALUE_INFINITE;
                         }
                         continue;
                     }
                     if best_score >= beta {
                         // Fail high - widen beta
-                        beta = if failed == 0 {
-                            beta.saturating_add(100)
-                        } else {
-                            VALUE_INFINITE
-                        };
-                        failed += 1;
-                        if failed == 1 {
-                            move_scores.clear();
+                        beta = beta.saturating_add(100);
+                        if beta >= VALUE_INFINITE - 100 {
+                            beta = VALUE_INFINITE;
                         }
                         continue;
                     }
@@ -311,6 +415,28 @@ impl Search {
         }
 
         best_move.map(|mv| (mv, best_score_overall))
+    }
+
+    // ─── Correction History ─────────────────────────────────────────────────────
+
+    /// Look up the correction for the current position's pawn structure.
+    /// Returns a centipawn adjustment to add to the static eval.
+    fn correction(&self) -> i32 {
+        let side = self.position.side_to_move;
+        let idx = (self.position.pawn_hash as usize) % CORRECTION_HISTORY_SIZE;
+        self.correction_history[side][idx] / CORRECTION_GRAIN
+    }
+
+    /// Update the correction history entry with exponential moving average.
+    /// `search_score` is the true search result, `static_eval` is the raw NNUE eval.
+    fn update_correction(&mut self, static_eval: i16, search_score: i16, depth: u8) {
+        let side = self.position.side_to_move;
+        let idx = (self.position.pawn_hash as usize) % CORRECTION_HISTORY_SIZE;
+        let error = (search_score as i32 - static_eval as i32) * CORRECTION_GRAIN;
+        let weight = (depth as i32).min(16);
+        let entry = &mut self.correction_history[side][idx];
+        *entry = (*entry * (256 - weight) + error * weight) / 256;
+        *entry = (*entry).clamp(-CORRECTION_MAX, CORRECTION_MAX);
     }
 
     // ─── Move Ordering ────────────────────────────────────────────────────────
@@ -389,22 +515,76 @@ impl Search {
             return Some(VALUE_DRAW);
         }
 
+        // Repetition detection: scan back through previous positions.
+        // A position can only repeat after at least 4 half-moves (rule50 >= 4).
+        // We scan back within the rule50 window since captures/pawn moves reset it.
+        //
+        // State layout: states[len-1].zobrist stores the zobrist *before* the last
+        // move, i.e. the position at (current_ply - 1). So states[len-k].zobrist
+        // gives the position at (current_ply - k). We want same-side positions,
+        // which are at even distances: k = 2, 4, 6, ...
+        {
+            let rule50 = self.position.states.last().unwrap().rule50;
+            if rule50 >= 4 {
+                let states = &self.position.states;
+                let current_zobrist = self.position.zobrist;
+                let len = states.len();
+                let mut k = 2usize;
+                while k <= rule50 && k < len {
+                    if states[len - k].zobrist == current_zobrist {
+                        return Some(VALUE_DRAW);
+                    }
+                    k += 2;
+                }
+            }
+        }
+
+        // Insufficient material detection
+        if (self.position.by_type_bb[Sides::BOTH][PieceType::PAWN]
+            | self.position.by_type_bb[Sides::BOTH][PieceType::ROOK]
+            | self.position.by_type_bb[Sides::BOTH][PieceType::QUEEN])
+            == EMPTY
+        {
+            let white_knights = self.position.by_type_bb[Sides::WHITE][PieceType::KNIGHT].count_ones();
+            let white_bishops = self.position.by_type_bb[Sides::WHITE][PieceType::BISHOP].count_ones();
+            let black_knights = self.position.by_type_bb[Sides::BLACK][PieceType::KNIGHT].count_ones();
+            let black_bishops = self.position.by_type_bb[Sides::BLACK][PieceType::BISHOP].count_ones();
+            let white_minors = white_knights + white_bishops;
+            let black_minors = black_knights + black_bishops;
+
+            // KvK, KvKN, KvKB, KNvK, KBvK
+            if white_minors + black_minors <= 1 {
+                return Some(VALUE_DRAW);
+            }
+            // KBvKB with same-color bishops
+            if white_minors == 1 && black_minors == 1 && white_bishops == 1 && black_bishops == 1 {
+                let wb_sq = bits::lsb(self.position.by_type_bb[Sides::WHITE][PieceType::BISHOP]);
+                let bb_sq = bits::lsb(self.position.by_type_bb[Sides::BLACK][PieceType::BISHOP]);
+                if (file_of(wb_sq) + rank_of(wb_sq)) % 2 == (file_of(bb_sq) + rank_of(bb_sq)) % 2 {
+                    return Some(VALUE_DRAW);
+                }
+            }
+        }
+
         // TT probe
         let zobrist = self.position.zobrist;
+        let is_pv = (beta as i32) - (alpha as i32) > 1;
         let mut tt_move = Move::none();
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             tt_move = entry.best_move;
-            if entry.depth >= depth {
+            // Skip TT cutoffs at PV nodes to avoid truncating the principal variation
+            if !is_pv && entry.depth >= depth {
+                let tt_value = adjust_mate_score_from_tt(entry.value, ply);
                 match entry.node_type {
-                    NodeType::Exact => return Some(entry.value),
+                    NodeType::Exact => return Some(tt_value),
                     NodeType::LowerBound => {
-                        if entry.value >= beta {
-                            return Some(entry.value);
+                        if tt_value >= beta {
+                            return Some(tt_value);
                         }
                     }
                     NodeType::UpperBound => {
-                        if entry.value <= alpha {
-                            return Some(entry.value);
+                        if tt_value <= alpha {
+                            return Some(tt_value);
                         }
                     }
                 }
@@ -432,11 +612,11 @@ impl Search {
                 let r = 3 + (search_depth as usize / 4); // adaptive reduction: R = 3 + depth/4
                 let reduced_depth = search_depth.saturating_sub(r as u8);
 
-                self.position.do_null_move();
+                self.do_null_move_nnue();
                 let score = self
                     .alpha_beta(reduced_depth, -beta, -beta + 1, ply + 1, false)
                     .map(|s| -s);
-                self.position.undo_null_move();
+                self.undo_null_move_nnue();
 
                 match score {
                     Some(s) if s >= beta => return Some(beta),
@@ -446,9 +626,10 @@ impl Search {
             }
         }
 
-        // Static eval for pruning decisions
-        let static_eval = self.evaluate_position();
-        let is_pv = (beta as i32) - (alpha as i32) > 1;
+        // Static eval for pruning decisions, adjusted by correction history
+        let raw_static_eval = self.evaluate_position();
+        let static_eval =
+            (raw_static_eval as i32 + self.correction()).clamp(-VALUE_MATE as i32 + 1, VALUE_MATE as i32 - 1) as i16;
 
         // Reverse Futility Pruning (RFP)
         // If static eval is far above beta (by 80*depth cp), assume no move will
@@ -545,7 +726,7 @@ impl Search {
                 continue;
             }
 
-            self.position.do_move(mv);
+            self.do_move_nnue(mv);
 
             // ── PVS + LMR Search Logic ────────────────────────────────────────
             let score;
@@ -595,7 +776,7 @@ impl Search {
                 score = s;
             }
 
-            self.position.undo_move(mv);
+            self.undo_move_nnue(mv);
 
             match score {
                 Some(score) => {
@@ -610,19 +791,22 @@ impl Search {
                         if !is_capture && ply < MAX_PLY {
                             self.killers[ply][1] = self.killers[ply][0];
                             self.killers[ply][0] = mv;
-                            self.history[mv.from_sq()][mv.to_sq()] += (search_depth as i32) * (search_depth as i32);
+                            // History gravity: keeps values bounded with natural decay
+                            let bonus = (search_depth as i32) * (search_depth as i32);
+                            let entry = &mut self.history[mv.from_sq()][mv.to_sq()];
+                            *entry += bonus - bonus * (*entry).abs() / 16384;
                         }
 
                         self.eval.transposition_table.store(
                             zobrist,
                             HashData {
                                 depth: search_depth,
-                                value: beta,
+                                value: adjust_mate_score_to_tt(score, ply),
                                 best_move: mv,
                                 node_type: NodeType::LowerBound,
                             },
                         );
-                        return Some(beta);
+                        return Some(score);
                     }
                     if score > alpha {
                         alpha = score;
@@ -641,22 +825,30 @@ impl Search {
         } else {
             NodeType::UpperBound
         };
+        // Store best_score (fail-soft) rather than alpha for more accurate TT entries
+        let tt_value = if alpha > original_alpha { best_score } else { alpha };
         self.eval.transposition_table.store(
             zobrist,
             HashData {
                 depth: search_depth,
-                value: alpha,
+                value: adjust_mate_score_to_tt(tt_value, ply),
                 best_move,
                 node_type,
             },
         );
 
-        Some(alpha)
+        // Update correction history: learn from the difference between raw static eval and search score.
+        // Only update at non-PV, non-check nodes with non-mate scores for reliability.
+        if !is_pv && !in_check && best_score.abs() < VALUE_MATE - 100 {
+            self.update_correction(raw_static_eval, best_score, search_depth);
+        }
+
+        Some(best_score)
     }
 
     // ─── Quiescence Search ─────────────────────────────────────────────────────
 
-    /// Quiescence search: resolve tactical sequences (captures, promotions, en passant)
+    /// Quiescence search: resolve tactical sequences (captures, en passant)
     /// to avoid horizon effect. Uses stand-pat score as lower bound, then searches
     /// only tactical moves with delta pruning and SEE pruning.
     fn quiescence(&mut self, mut alpha: i16, beta: i16, ply: usize) -> Option<i16> {
@@ -680,14 +872,12 @@ impl Search {
 
         let moves = self.movegen.legal_moves(&self.position);
 
-        // Filter to captures, en passant, and promotions
+        // Filter to captures and en passant only (not quiet promotions)
         let mut scored_moves: Vec<(Move, i32)> = Vec::new();
         for &mv in moves.iter() {
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();
-            let is_capture = self.position.board[to_sq] != PieceType::NONE
-                || move_type == MoveTypes::EN_PASSANT
-                || move_type == MoveTypes::PROMOTION;
+            let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
 
             if is_capture {
                 let score = self.score_move(mv, Move::none(), ply);
@@ -727,9 +917,9 @@ impl Search {
                 continue;
             }
 
-            self.position.do_move(mv);
+            self.do_move_nnue(mv);
             let score = self.quiescence(-beta, -alpha, ply + 1).map(|s| -s);
-            self.position.undo_move(mv);
+            self.undo_move_nnue(mv);
 
             match score {
                 Some(score) => {

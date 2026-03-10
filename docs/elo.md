@@ -23,6 +23,7 @@ Oxide doesn't have an official CCRL rating. To estimate its strength, we run SPR
 
 | Oxide Version | Estimated Elo | Notes |
 |---------------|---------------|-------|
+| v1.0.0 | ~ |  |
 | v0.2.0 | ~1900 | Barely beats Stash v12 (1886) |
 
 ## Stash Reference Ratings

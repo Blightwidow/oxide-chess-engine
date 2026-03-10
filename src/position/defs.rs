@@ -9,6 +9,7 @@ pub struct StateInfo {
     pub rule50: usize,
     pub game_ply: usize,
     pub zobrist: u64,
+    pub pawn_hash: u64,
     pub pinned_bb: [Bitboard; 2],
 }
 
@@ -21,6 +22,7 @@ impl StateInfo {
             rule50: 0,
             game_ply: 0,
             zobrist: 0,
+            pawn_hash: 0,
             pinned_bb: [EMPTY; 2],
         }
     }

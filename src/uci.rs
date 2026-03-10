@@ -43,6 +43,7 @@ impl Uci {
                 println!("readyok");
             } else if token == "ucinewgame" {
                 search.position.set(FEN_START_POSITION.to_string());
+                search.nnue.refresh(&search.position);
                 search.eval.transposition_table.clear();
             } else if token == "position" {
                 Uci::position(search, &mut args);
@@ -75,6 +76,7 @@ impl Uci {
 
         if token == "startpos" {
             search.position.set(FEN_START_POSITION.to_string());
+            search.nnue.refresh(&search.position);
 
             // Consume the next token if it is 'moves'
             args.next();
@@ -88,6 +90,7 @@ impl Uci {
             }
 
             search.position.set(fen);
+            search.nnue.refresh(&search.position);
         }
 
         // Move to first move if any
@@ -98,7 +101,7 @@ impl Uci {
 
             for mv in search.movegen.legal_moves(&search.position) {
                 if mv_string == format!("{:?}", mv) {
-                    search.position.do_move(mv);
+                    search.make_move(mv);
                     break;
                 }
             }
@@ -113,6 +116,9 @@ impl Uci {
 
         while !token.is_empty() {
             match token {
+                "EvalFile" => {
+                    search.load_nnue(args.next().unwrap_or(""));
+                }
                 "perft" => {
                     limits.perft = args.next().unwrap_or("1").parse::<u8>().unwrap_or(1);
                 }
@@ -199,6 +205,7 @@ impl Uci {
             println!("\nPosition: {}/{} ({})", i + 1, FENS.len(), fen);
             search.eval.transposition_table.clear();
             search.position.set(fen.to_string());
+            search.nnue.refresh(&search.position);
             search.run(limits);
             nodes += search.nodes_searched;
         }
@@ -246,19 +253,20 @@ impl Uci {
 
         for suite in &suites {
             search.position.set(suite.fen.to_string());
+            search.nnue.refresh(&search.position);
 
             for depth in 1..=suite.max_depth {
                 let start = time::Instant::now();
                 let nodes = search.perft(depth, false);
-                let elapsed_ms = start.elapsed().as_millis();
-                let mnps = if elapsed_ms > 0 {
-                    nodes as f64 / elapsed_ms as f64 / 1000.0
+                let elapsed_ms = start.elapsed().as_nanos() as f64 / 1000000.0;
+                let mnps = if elapsed_ms > 0.0 {
+                    nodes as f64 / elapsed_ms / 1000.0
                 } else {
                     nodes as f64 / 1000.0
                 };
 
                 println!(
-                    "Perft {} {}: {} {}ms {:.2} MNodes/s",
+                    "Perft {} {}: {} {:.3}ms {:.2} MNodes/s",
                     suite.name, depth, nodes, elapsed_ms, mnps
                 );
 
@@ -293,7 +301,7 @@ impl Uci {
             "Black"
         };
 
-        let raw_eval = search.nnue.evaluate(&search.position);
+        let raw_eval = search.nnue.evaluate(search.position.side_to_move);
         // raw_eval is from side-to-move's perspective; convert to white's perspective
         let white_eval = if search.position.side_to_move == crate::defs::Sides::WHITE {
             raw_eval

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Run SPRT tests for every .nnue file in nets/ against the current default net.
-# Skips nets/default.nnue itself. Results are logged to nets/<hash>.sprt.log.
+# Run SPRT tests for every .nnue file in nets/ against the currently embedded net.
+# Skips the baseline net itself. Results are logged to nets/<hash>.sprt.log.
 # Expects to be run from the repo root.
 
 set -euo pipefail
 
 NETS_DIR="nets"
-BASE_NET="nets/default.nnue"
+BASE_NAME=$(grep 'pub const DEFAULT_EVAL_FILE' src/main.rs | sed 's/.*"\(.*\)".*/\1/')
+BASE_NET="nets/${BASE_NAME}"
 FASTCHESS="./bin/fastchess"
-ENGINE="./target/release/chessbot"
+ENGINE="./target/release/oxide"
 OPENINGS="data/openings.pgn"
 CONCURRENCY=6
 ROUNDS=15000

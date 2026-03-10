@@ -10,6 +10,8 @@ pub const QA: i32 = 255;
 pub const QB: i32 = 64;
 /// Scale factor to convert network output to centipawns
 pub const SCALE: i32 = 400;
+/// Accumulator type: one per perspective (white/black)
+pub type Accumulator = [i16; HIDDEN_SIZE];
 /// Network file format version
 pub const NET_VERSION: u32 = 1;
 /// Magic bytes for the .nnue file header

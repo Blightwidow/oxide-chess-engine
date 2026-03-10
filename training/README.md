@@ -68,6 +68,7 @@ cargo build -r
 ./bin/fastchess \
   -engine cmd=./target/release/chessbot name=new_net "option.EvalFile=nets/new.nnue" \
   -engine cmd=./target/release/chessbot name=base_net "option.EvalFile=nets/default.nnue" \
+  -openings file=./data/openings.pgn format=pgn order=random \
   -each tc=8+0.08 -rounds 15000 -repeat -concurrency 6 -recover \
   -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05
 ```

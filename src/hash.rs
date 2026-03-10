@@ -5,6 +5,8 @@ pub struct Hasher {
     pub side_key: u64,
     pub castling_keys: [u64; 16],
     pub en_passant_keys: [u64; 8],
+    /// Separate Zobrist keys for pawn hash (used by correction history)
+    pub pawn_keys: [[u64; NrOf::SQUARES]; 2],
 }
 
 impl Hasher {
@@ -32,11 +34,19 @@ impl Hasher {
             *key = rng.next();
         }
 
+        let mut pawn_keys = [[0u64; NrOf::SQUARES]; 2];
+        for side_keys in &mut pawn_keys {
+            for key in side_keys.iter_mut() {
+                *key = rng.next();
+            }
+        }
+
         Self {
             piece_keys,
             side_key,
             castling_keys,
             en_passant_keys,
+            pawn_keys,
         }
     }
 

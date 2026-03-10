@@ -13,8 +13,23 @@ cargo fmt                   # Format
 ## Testing
 
 ```bash
-cargo test                  # All tests
+cargo test                  # All tests (fast, runs on every change)
+cargo test -- --ignored     # Include slow/ignored tests
 ```
+
+Some tests are marked `#[ignore]` because they take significantly longer to run (minutes rather than seconds). These should be run explicitly before submitting changes that affect search or evaluation:
+
+```bash
+cargo test bratko_kopec -- --ignored --nocapture
+cargo test kaufman -- --ignored --nocapture
+cargo test nolot -- --ignored --nocapture
+```
+
+- **Bratko-Kopec** (24 positions) — Classic positional/tactical test suite. Checks `bm` (best move) at depth 10.
+- **Kaufman** (25 positions) — Mix of tactics and endgames. Checks `bm` and `am` (avoid move) at depth 10.
+- **Nolot** (11 positions) — Sharp tactical positions requiring deep calculation. Checks `bm` at depth 10.
+
+All use a minimum pass threshold (~50%) to catch regressions. Run these when modifying search heuristics, pruning, or evaluation.
 
 ### SPRT Testing (strength regression)
 

@@ -1,5 +1,7 @@
 # Oxide Chess Engine
 
+![Logo illustration](./docs/logo.png)
+
 A UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
 
 ## Usage

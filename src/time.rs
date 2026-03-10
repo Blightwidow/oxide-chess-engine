@@ -35,7 +35,7 @@ impl TimeManager {
             let moves_to_go = if limits.moves_to_go > 0 {
                 cmp::max(limits.moves_to_go, 1) as f64
             } else {
-                40_usize.saturating_sub(game_ply).max(MIN_MOVES_TO_GO) as f64
+                40_usize.saturating_sub(game_ply / 2).max(MIN_MOVES_TO_GO) as f64
             };
             let time_slice = (increment + time * MAX_USAGE / moves_to_go).round() as u64;
             let soft = start_time + time::Duration::from_millis((time_slice as f64 * SOFT_FACTOR).round() as u64);
