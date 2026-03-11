@@ -2,7 +2,7 @@
 
 ![Logo illustration](./docs/logo.png)
 
-A UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
+A 2400 Elo UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
 
 ## Usage
 
