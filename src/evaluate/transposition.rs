@@ -3,12 +3,14 @@ use crate::movegen::defs::Move;
 pub struct TranspositionTable {
     entries: Vec<Entry>,
     size: usize,
+    generation: u8,
 }
 
 #[derive(Copy, Clone)]
 pub struct Entry {
     key: u64,
     data: HashData,
+    generation: u8,
 }
 #[derive(Copy, Clone)]
 #[allow(dead_code)]
@@ -48,21 +50,29 @@ impl TranspositionTable {
                 Entry {
                     key: 0,
                     data: HashData::default(),
+                    generation: 0,
                 };
                 nb_entries
             ],
             size: nb_entries,
+            generation: 0,
         }
+    }
+
+    /// Increment the generation counter. Call once per search.
+    pub fn new_generation(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
     }
 
     pub fn store(&mut self, key: u64, data: HashData) {
         let index = key % self.size as u64;
         let entry = &mut self.entries[index as usize];
 
-        // Replace if: empty slot, same key, or new depth >= existing depth
-        if entry.key == 0 || entry.key == key || data.depth >= entry.data.depth {
+        // Replace if: empty slot, same key, stale generation, or new depth >= existing depth
+        if entry.key == 0 || entry.key == key || entry.generation != self.generation || data.depth >= entry.data.depth {
             entry.key = key;
             entry.data = data;
+            entry.generation = self.generation;
         }
     }
 
@@ -70,12 +80,17 @@ impl TranspositionTable {
         for entry in self.entries.iter_mut() {
             entry.key = 0;
             entry.data = HashData::default();
+            entry.generation = 0;
         }
+        self.generation = 0;
     }
 
     pub fn hashfull(&self) -> usize {
         let sample = self.entries.len().min(1000);
-        let used = self.entries[..sample].iter().filter(|e| e.key != 0).count();
+        let used = self.entries[..sample]
+            .iter()
+            .filter(|e| e.key != 0 && e.generation == self.generation)
+            .count();
         used * 1000 / sample
     }
 
@@ -132,7 +147,7 @@ mod test {
         tt.store(key_a, make_data(5, 100, NodeType::Exact));
         tt.store(key_b, make_data(3, 200, NodeType::LowerBound));
 
-        // Original should be preserved (deeper)
+        // Original should be preserved (same generation, deeper)
         let result = tt.probe(key_a).unwrap();
         assert_eq!(result.depth, 5);
         assert_eq!(result.value, 100);
@@ -150,6 +165,22 @@ mod test {
         // New entry should replace (deeper)
         let result = tt.probe(key_b).unwrap();
         assert_eq!(result.depth, 7);
+        assert_eq!(result.value, 200);
+    }
+
+    #[test]
+    fn stale_generation_always_replaced() {
+        let mut tt = TranspositionTable::new(1);
+        let key_a = 42u64;
+        let key_b = key_a + tt.size as u64; // same index, different key
+
+        tt.store(key_a, make_data(10, 100, NodeType::Exact));
+        tt.new_generation(); // advance generation
+        tt.store(key_b, make_data(3, 200, NodeType::LowerBound));
+
+        // New entry replaces despite lower depth (stale generation)
+        let result = tt.probe(key_b).unwrap();
+        assert_eq!(result.depth, 3);
         assert_eq!(result.value, 200);
     }
 
@@ -190,5 +221,16 @@ mod test {
             tt.store(i, make_data(1, 0, NodeType::Exact));
         }
         assert!(tt.hashfull() > 0);
+    }
+
+    #[test]
+    fn hashfull_ignores_stale_entries() {
+        let mut tt = TranspositionTable::new(1);
+        for i in 0..100u64 {
+            tt.store(i, make_data(1, 0, NodeType::Exact));
+        }
+        tt.new_generation();
+        // After new generation, old entries should not count
+        assert_eq!(tt.hashfull(), 0);
     }
 }

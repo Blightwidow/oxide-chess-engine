@@ -67,7 +67,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Negamax with alpha-beta pruning
 * Iterative deepening with aspiration windows
 * Principal Variation Search (PVS)
-* Transposition table with best move, depth, and node type
+* Transposition table with age-based replacement, best move, depth, and node type
 * Mate score adjustment for TT storage
 * Correction history (pawn-hash indexed static eval error tracking)
 * Quiescence search (captures, en passant, promotions)
@@ -80,7 +80,11 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Late move reductions (LMR)
 * SEE pruning (static exchange evaluation)
 * Delta pruning in quiescence
-* Move ordering: TT move > MVV-LVA captures > killer moves > history heuristic
+* Staged move generation (MovePicker) with lazy legality checking
+* Move ordering: TT move > good captures > killers > countermove > quiets > bad captures
+* Capture history and continuation history (1-ply + 2-ply) for move ordering
+* History malus for quiet moves tried before beta cutoffs
+* Granular history-based scaling for LMR, LMP, and futility thresholds
 
 ### Evaluation
 

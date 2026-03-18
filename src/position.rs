@@ -558,6 +558,109 @@ impl Position {
         self.bitboards.attack_bb(piece, sq, occupied)
     }
 
+    /// Check if a move is pseudo-legal (valid piece movement, ignoring check legality).
+    /// Used to validate TT moves and killer moves before calling legal().
+    pub fn is_pseudo_legal(&self, mv: Move) -> bool {
+        let from = mv.from_sq();
+        let to = mv.to_sq();
+
+        if from >= 64 || to >= 64 {
+            return false;
+        }
+
+        let piece = self.board[from];
+        let us = self.side_to_move;
+
+        // No piece on source, or wrong color
+        if piece == PieceType::NONE || color_of_piece(piece) != us {
+            return false;
+        }
+
+        // Can't capture opponent's king
+        if self.board[to] != PieceType::NONE && type_of_piece(self.board[to]) == PieceType::KING {
+            return false;
+        }
+
+        let piece_type = type_of_piece(piece);
+        let move_type = mv.type_of();
+
+        match move_type {
+            MoveTypes::CASTLING => {
+                if piece_type != PieceType::KING {
+                    return false;
+                }
+                let to_piece = self.board[to];
+                // to square should have our rook
+                if to_piece == PieceType::NONE
+                    || type_of_piece(to_piece) != PieceType::ROOK
+                    || color_of_piece(to_piece) != us
+                {
+                    return false;
+                }
+                // Castling rights must include this specific castling
+                self.castling_masks[from] & self.castling_masks[to] & self.states.last().unwrap().castling_rights != 0
+            }
+            MoveTypes::EN_PASSANT => {
+                if piece_type != PieceType::PAWN {
+                    return false;
+                }
+                let ep_sq = self.states.last().unwrap().en_passant_square;
+                to == ep_sq && ep_sq != NONE_SQUARE
+            }
+            MoveTypes::PROMOTION => {
+                if piece_type != PieceType::PAWN {
+                    return false;
+                }
+                let rank_7 = if us == Sides::WHITE { 6 } else { 1 };
+                if rank_of(from) != rank_7 {
+                    return false;
+                }
+                let up = pawn_push(us);
+                let forward = (from as isize + up) as usize;
+                if to == forward {
+                    // Quiet promotion
+                    self.board[to] == PieceType::NONE
+                } else {
+                    // Capture promotion
+                    let them = us ^ 1;
+                    self.board[to] != PieceType::NONE
+                        && color_of_piece(self.board[to]) == them
+                        && self.attack_bb(piece, from, EMPTY) & square_bb(to) != EMPTY
+                }
+            }
+            _ => {
+                // Normal move — can't capture own piece
+                if self.board[to] != PieceType::NONE && color_of_piece(self.board[to]) == us {
+                    return false;
+                }
+
+                if piece_type == PieceType::PAWN {
+                    let up = pawn_push(us);
+                    let forward = (from as isize + up) as usize;
+                    let double = (from as isize + 2 * up) as usize;
+                    let rank_2 = if us == Sides::WHITE { 1 } else { 6 };
+
+                    if to == forward {
+                        self.board[to] == PieceType::NONE
+                    } else if to == double {
+                        rank_of(from) == rank_2
+                            && self.board[forward] == PieceType::NONE
+                            && self.board[to] == PieceType::NONE
+                    } else {
+                        // Pawn capture
+                        let them = us ^ 1;
+                        self.board[to] != PieceType::NONE
+                            && color_of_piece(self.board[to]) == them
+                            && self.attack_bb(piece, from, EMPTY) & square_bb(to) != EMPTY
+                    }
+                } else {
+                    // Non-pawn: check attack bitboard
+                    self.attack_bb(piece, from, self.by_color_bb[Sides::BOTH]) & square_bb(to) != EMPTY
+                }
+            }
+        }
+    }
+
     pub fn attackers_to(&self, sq: Square, occupied: Bitboard) -> Bitboard {
         (self
             .bitboards

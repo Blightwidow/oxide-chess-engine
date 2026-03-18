@@ -26,7 +26,7 @@ Shared data (`Bitboards`, `Hasher`) is distributed via `Rc` (reference counting)
 | **evaluate** | `src/evaluate.rs` | Handcrafted tapered eval with piece-square tables |
 | **nnue** | `src/nnue/` | NNUE neural network evaluation (optional) |
 | **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
-| **movegen** | `src/movegen.rs` | Legal move generation |
+| **movegen** | `src/movegen.rs` | Move generation (full and capture-only) |
 | **bitboards** | `src/bitboards.rs` | Magic bitboards, attack tables, LERF mapping |
 | **time** | `src/time.rs` | Time management for search cutoff |
 | **defs** | `src/defs.rs` | Core types: `Bitboard`, `Piece`, `Side`, `Square` |

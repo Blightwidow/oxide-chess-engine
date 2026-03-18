@@ -3,6 +3,8 @@ mod test;
 
 use std::time;
 
+use arrayvec::ArrayVec;
+
 use crate::{
     bitboards::defs::EMPTY,
     defs::*,
@@ -143,6 +145,9 @@ impl Search {
         self.prev_move = Move::none();
         self.static_eval_stack = [0i16; MAX_PLY];
         self.nodes_until_check = CHECK_INTERVAL;
+
+        // Increment TT generation for age-based replacement
+        self.eval.transposition_table.new_generation();
 
         self.time = TimeManager::new(
             limits,
@@ -333,7 +338,7 @@ impl Search {
             return None;
         }
 
-        let mut move_scores: Vec<(Move, Option<i16>)> = Vec::new();
+        let mut move_scores: ArrayVec<(Move, Option<i16>), 256> = ArrayVec::new();
         let mut best_move: Option<Move> = moves.first().copied();
         let mut best_score_overall: i16 = -VALUE_INFINITE;
         let mut prev_best_move = Move::none();
@@ -348,11 +353,11 @@ impl Search {
             let mut best_score;
             let mut current_best_move: Option<Move>;
 
-            let sorted_moves: Vec<Move> = if move_scores.is_empty() {
-                moves.to_vec()
+            let sorted_moves: ArrayVec<Move, 256> = if move_scores.is_empty() {
+                moves.iter().copied().collect()
             } else {
                 move_scores.sort_by_key(|k| std::cmp::Reverse(k.1));
-                let sorted: Vec<Move> = move_scores.iter().map(|(mv, _)| *mv).collect();
+                let sorted: ArrayVec<Move, 256> = move_scores.iter().map(|(mv, _)| *mv).collect();
                 move_scores.clear();
                 sorted
             };
@@ -758,7 +763,7 @@ impl Search {
         }
 
         // Score moves for ordering
-        let mut scored_moves: Vec<(Move, i32)> = moves
+        let mut scored_moves: ArrayVec<(Move, i32), 256> = moves
             .iter()
             .map(|&mv| (mv, self.score_move(mv, tt_move, ply, self.prev_move)))
             .collect();
@@ -766,6 +771,7 @@ impl Search {
         let original_alpha = alpha;
         let mut best_move = Move::none();
         let mut best_score = -VALUE_INFINITE;
+        let mut quiet_moves_tried: ArrayVec<Move, 64> = ArrayVec::new();
 
         // ── Move Loop ─────────────────────────────────────────────────────────
         // Incremental selection sort: pick the highest-scored move each iteration
@@ -822,6 +828,11 @@ impl Search {
                 continue;
             }
 
+            // Track quiet moves for history malus on beta cutoff
+            if is_quiet && quiet_moves_tried.len() < quiet_moves_tried.capacity() {
+                quiet_moves_tried.push(mv);
+            }
+
             self.do_move_nnue(mv);
             let saved_prev_move = self.prev_move;
             self.prev_move = mv;
@@ -856,7 +867,14 @@ impl Search {
 
                 // Step 1: Null-window search (possibly at reduced depth for LMR)
                 let mut s = self
-                    .alpha_beta(reduced_depth, (-alpha).saturating_sub(1), -alpha, ply + 1, true, Move::none())
+                    .alpha_beta(
+                        reduced_depth,
+                        (-alpha).saturating_sub(1),
+                        -alpha,
+                        ply + 1,
+                        true,
+                        Move::none(),
+                    )
                     .map(|s| -s);
 
                 // Step 2: LMR re-search — if reduced search beat alpha, try full depth
@@ -908,6 +926,14 @@ impl Search {
                             let bonus = (search_depth as i32) * (search_depth as i32);
                             let entry = &mut self.history[mv.from_sq()][mv.to_sq()];
                             *entry += bonus - bonus * (*entry).abs() / 16384;
+                            // History malus: penalize quiet moves tried before cutoff
+                            let malus = -bonus;
+                            for &tried_mv in quiet_moves_tried.iter() {
+                                if tried_mv != mv {
+                                    let e = &mut self.history[tried_mv.from_sq()][tried_mv.to_sq()];
+                                    *e += malus - malus * (*e).abs() / 16384;
+                                }
+                            }
                             // Countermove heuristic
                             if self.prev_move != Move::none() {
                                 self.countermoves[self.prev_move.from_sq()][self.prev_move.to_sq()] = mv;
@@ -990,7 +1016,7 @@ impl Search {
         let moves = self.movegen.legal_moves(&self.position);
 
         // Filter to captures and en passant only (not quiet promotions)
-        let mut scored_moves: Vec<(Move, i32)> = Vec::new();
+        let mut scored_moves: ArrayVec<(Move, i32), 256> = ArrayVec::new();
         for &mv in moves.iter() {
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();

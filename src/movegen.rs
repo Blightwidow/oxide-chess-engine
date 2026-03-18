@@ -25,6 +25,83 @@ impl Movegen {
         Self { bitboards }
     }
 
+    /// Generate pseudo-legal captures, en passant, and promotions. Filtered for legality.
+    pub fn generate_captures(&self, position: &Position) -> MoveList {
+        let us = position.side_to_move;
+        let them = us ^ 1;
+        let mut movelist: MoveList = ArrayVec::new();
+        let checkers = position.checkers_bb(us);
+        let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
+        let num_checkers = checkers.count_ones();
+
+        let check_target: Bitboard = match num_checkers {
+            1 => {
+                let checker_sq = bits::lsb(checkers);
+                self.bitboards.between_bb[king_square][checker_sq] | square_bb(checker_sq)
+            }
+            _ => FULL,
+        };
+
+        // Exclude enemy king from capture targets (can't capture the king)
+        let enemy_no_king = position.by_color_bb[them] & !position.by_type_bb[them][PieceType::KING];
+
+        if num_checkers <= 1 {
+            self.generate_pawn_captures(position, &mut movelist, us, check_target);
+            let target = enemy_no_king & check_target;
+            self.generate_piece(position, &mut movelist, PieceType::KNIGHT, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::BISHOP, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::ROOK, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::QUEEN, us, target);
+        }
+
+        // King captures (no check_target restriction — king resolves check by moving)
+        self.generate_piece(position, &mut movelist, PieceType::KING, us, enemy_no_king);
+
+        movelist
+    }
+
+    /// Generate pseudo-legal quiet moves (non-captures, non-promotions). Not filtered for legality.
+    pub fn generate_quiets(&self, position: &Position) -> MoveList {
+        let us = position.side_to_move;
+        let mut movelist: MoveList = ArrayVec::new();
+        let checkers = position.checkers_bb(us);
+        let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
+        let num_checkers = checkers.count_ones();
+
+        let check_target: Bitboard = match num_checkers {
+            1 => {
+                let checker_sq = bits::lsb(checkers);
+                self.bitboards.between_bb[king_square][checker_sq] | square_bb(checker_sq)
+            }
+            _ => FULL,
+        };
+
+        if num_checkers <= 1 {
+            self.generate_pawn_quiets(position, &mut movelist, us, check_target);
+            let target = !position.by_color_bb[Sides::BOTH] & check_target;
+            self.generate_piece(position, &mut movelist, PieceType::KNIGHT, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::BISHOP, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::ROOK, us, target);
+            self.generate_piece(position, &mut movelist, PieceType::QUEEN, us, target);
+        }
+
+        // King quiet moves (no check_target restriction)
+        self.generate_piece(
+            position,
+            &mut movelist,
+            PieceType::KING,
+            us,
+            !position.by_color_bb[Sides::BOTH],
+        );
+
+        // Castling (only if not in check)
+        if checkers == EMPTY {
+            self.generate_castling(position, &mut movelist, us);
+        }
+
+        movelist
+    }
+
     pub fn legal_moves(&self, position: &Position) -> MoveList {
         let us = position.side_to_move;
         let king_square: Square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
@@ -176,6 +253,120 @@ impl Movegen {
 
                 movelist.push(Move::make(from, to, PieceType::NONE, move_type));
             }
+        }
+    }
+
+    /// Generate pawn captures, en passant, and promotions (both capture and quiet promotions).
+    fn generate_pawn_captures(&self, position: &Position, movelist: &mut MoveList, us: Side, target_bb: Bitboard) {
+        let them: Side = us ^ 1;
+        let up: Direction = match us {
+            Sides::WHITE => Directions::UP,
+            Sides::BLACK => Directions::DOWN,
+            _ => panic!("Invalid side"),
+        };
+        let rank_7bb: Bitboard = match us {
+            Sides::WHITE => RANK_7BB,
+            Sides::BLACK => RANK_2BB,
+            _ => panic!("Invalid side"),
+        };
+        let empty_squares: Bitboard = !position.by_color_bb[Sides::BOTH];
+        let pawns_on_rank_7: Bitboard = position.by_type_bb[us][PieceType::PAWN] & rank_7bb;
+        let pawns_outside_rank_7: Bitboard = position.by_type_bb[us][PieceType::PAWN] & !rank_7bb;
+        let piece = make_piece(us, PieceType::PAWN);
+        // Exclude enemy king from capture targets
+        let enemy_no_king = position.by_color_bb[them] & !position.by_type_bb[them][PieceType::KING];
+
+        // Promotions (quiet push to 8th rank)
+        if pawns_on_rank_7 != EMPTY {
+            let mut promotion_bb: Bitboard = shift(pawns_on_rank_7, up) & empty_squares & target_bb;
+            while promotion_bb != EMPTY {
+                let to: Square = bits::pop(&mut promotion_bb);
+                for pt in [PieceType::KNIGHT, PieceType::BISHOP, PieceType::ROOK, PieceType::QUEEN] {
+                    movelist.push(Move::make((to as isize - up) as usize, to, pt, MoveTypes::PROMOTION));
+                }
+            }
+
+            // Capture-promotions
+            let mut attackers_bb: Bitboard = pawns_on_rank_7;
+            while attackers_bb != EMPTY {
+                let from: Square = bits::pop(&mut attackers_bb);
+                let mut attack_bb: Bitboard = self.bitboards.attack_bb(piece, from, EMPTY) & enemy_no_king & target_bb;
+                while attack_bb != EMPTY {
+                    let to: Square = bits::pop(&mut attack_bb);
+                    for pt in [PieceType::QUEEN, PieceType::ROOK, PieceType::BISHOP, PieceType::KNIGHT] {
+                        movelist.push(Move::make(from, to, pt, MoveTypes::PROMOTION));
+                    }
+                }
+            }
+        }
+
+        // Regular pawn captures (non-promotion) and en passant
+        let mut attackers_bb: Bitboard = pawns_outside_rank_7;
+        let state = position.states.last().unwrap();
+        let ep_target_bb: Bitboard = match state.en_passant_square {
+            NONE_SQUARE => target_bb,
+            ep_sq => {
+                let captured_sq = (ep_sq as isize - up) as usize;
+                if target_bb & square_bb(captured_sq) != EMPTY {
+                    target_bb | square_bb(ep_sq)
+                } else {
+                    target_bb
+                }
+            }
+        };
+
+        while attackers_bb != EMPTY {
+            let from: Square = bits::pop(&mut attackers_bb);
+            let en_passant_bb: Bitboard = match state.en_passant_square {
+                NONE_SQUARE => EMPTY,
+                square => square_bb(square),
+            };
+            let mut attack_bb: Bitboard =
+                self.bitboards.attack_bb(piece, from, EMPTY) & (enemy_no_king | en_passant_bb) & ep_target_bb;
+
+            while attack_bb != EMPTY {
+                let to: Square = bits::pop(&mut attack_bb);
+                let move_type = match to == state.en_passant_square {
+                    true => MoveTypes::EN_PASSANT,
+                    false => MoveTypes::NORMAL,
+                };
+                movelist.push(Move::make(from, to, PieceType::NONE, move_type));
+            }
+        }
+    }
+
+    /// Generate quiet pawn moves (single push, double push — no promotions, no captures).
+    fn generate_pawn_quiets(&self, position: &Position, movelist: &mut MoveList, us: Side, target_bb: Bitboard) {
+        let up: Direction = match us {
+            Sides::WHITE => Directions::UP,
+            Sides::BLACK => Directions::DOWN,
+            _ => panic!("Invalid side"),
+        };
+        let rank_7bb: Bitboard = match us {
+            Sides::WHITE => RANK_7BB,
+            Sides::BLACK => RANK_2BB,
+            _ => panic!("Invalid side"),
+        };
+        let rank_3bb: Bitboard = match us {
+            Sides::WHITE => RANK_3BB,
+            Sides::BLACK => RANK_6BB,
+            _ => panic!("Invalid side"),
+        };
+        let empty_squares: Bitboard = !position.by_color_bb[Sides::BOTH];
+        let pawns_outside_rank_7: Bitboard = position.by_type_bb[us][PieceType::PAWN] & !rank_7bb;
+
+        let mut single_bb: Bitboard = shift(pawns_outside_rank_7, up) & empty_squares;
+        let mut double_bb: Bitboard = shift(single_bb & rank_3bb, up) & empty_squares & target_bb;
+        single_bb &= target_bb;
+
+        while single_bb != EMPTY {
+            let to: Square = bits::pop(&mut single_bb);
+            movelist.push(Move::with_from_to((to as isize - up) as usize, to));
+        }
+
+        while double_bb != EMPTY {
+            let to: Square = bits::pop(&mut double_bb);
+            movelist.push(Move::with_from_to((to as isize - up - up) as usize, to));
         }
     }
 
