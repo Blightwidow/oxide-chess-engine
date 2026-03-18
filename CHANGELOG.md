@@ -2,6 +2,23 @@
 
 All notable changes to Oxide are documented in this file.
 
+## v1.0.1
+
+### Search
+
+- History malus: on quiet beta cutoff, penalize all previously tried quiet moves with -depth² gravity bonus
+- Staged move generation scaffolding (`generate_captures`, `generate_quiets`, `is_pseudo_legal`) for future MovePicker integration
+- ArrayVec for scored moves in root search, alpha-beta, and quiescence — eliminates heap allocations in the hot loop
+
+### Transposition Table
+
+- Age-based replacement: generation counter incremented per search, stale entries always replaced regardless of depth
+
+### Performance
+
+- SPRT: +19.77 Elo ± 12.99 (1812 games, LLR 2.90) over v1.0.0
+- Updated estimated strength to ~2400 Elo
+
 ## v1.0.0
 
 ### NNUE Evaluation
