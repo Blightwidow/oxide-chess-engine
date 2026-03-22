@@ -2,6 +2,30 @@
 
 All notable changes to Oxide are documented in this file.
 
+## v1.1.0
+
+### NNUE Evaluation
+
+- Upgraded to king-bucketed NNUE architecture (8 buckets by rank, horizontal mirroring for files e-h)
+- Total feature transformer input size: 8 × 768 = 6144 features per perspective
+- Incremental accumulator updates with per-perspective bucket-change refresh (full refresh when king changes bucket)
+- New embedded net: `nn-8808c22a8203.nnue` (net version 2)
+
+### Search
+
+- Added `improving` heuristic: tracks whether static eval is rising across plies to modulate pruning aggressiveness
+- Reverse futility pruning margin now scales with `improving` flag (tighter when improving)
+- Late move pruning threshold adjusted based on `improving` status
+- Null move pruning uses deeper reduction (depth/3 + 4 base, +1 when not improving)
+
+### Training
+
+- Trainer updated for bucketed architecture with per-bucket feature weights
+
+### Performance
+
+- SPRT: pending — estimated ~2400 Elo (on par with v1.0.1)
+
 ## v1.0.1
 
 ### Search
