@@ -112,21 +112,24 @@ The engine supports an optional NNUE (Efficiently Updatable Neural Network) eval
 ### Architecture
 
 ```
-768 inputs → [256] accumulator (per perspective) → CReLU
-[512] concatenated → [32] hidden → CReLU → [1] output → scale to centipawns
+(8 buckets × 768) inputs → [256] accumulator (per perspective) → SCReLU
+[512] concatenated → [32] hidden → SCReLU → [1] output → scale to centipawns
 ```
 
-- **Input features**: 768 = 2 colors × 6 piece types × 64 squares
+- **Input features**: 6144 = 8 king buckets × 768 (2 colors × 6 piece types × 64 squares)
+- **King bucketing**: Each perspective uses separate feature transformer weights depending on its king's position. Kings are bucketed by rank (0–7) with horizontal mirroring — files e-h are mapped to d-a, so the network only learns queen-side king positions and mirrors for king-side.
+- **Horizontal mirroring**: When the perspective's king is on files e-h, all piece squares are flipped horizontally (`sq ^ 7`) to normalize to the queen-side half.
+- **Bucket change refresh**: When a king move changes the bucket or mirror state, the moving side's accumulator is recomputed from scratch. The opponent's accumulator is updated incrementally as normal.
 - **Perspective**: White and black perspectives computed separately. For black, colors are swapped and squares vertically flipped.
 - **Quantization**: Accumulator clipped to [0, 255], output scaled by 400/(255×64)
 - **Arithmetic**: Pure integer (i16/i32), no floating point
 
-### Network File Format
+### Network File Format (v2)
 
 Binary `.nnue` file with header:
 - Magic: `OXNN` (4 bytes)
-- Version: `1` (u32 LE)
-- Feature size, hidden size, L1 size (3 × u32 LE)
+- Version: `2` (u32 LE)
+- Num buckets, feature size, hidden size, L1 size (4 × u32 LE)
 - Weights and biases as i16 little-endian
 
 Default path: `nets/default.nnue`. Configurable via `setoption name EvalFile value <path>`.

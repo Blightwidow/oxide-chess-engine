@@ -88,8 +88,9 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 
 ### Evaluation
 
-* NNUE evaluation (768->256x2->32->1 SCReLU architecture, integer quantized)
-* Incremental accumulator updates (push/pop with activate/deactivate per move)
+* NNUE evaluation (8-bucket king-bucketed 768->256x2->32->1 SCReLU architecture, integer quantized)
+* King bucketing with horizontal mirroring (8 buckets by rank, files e-h mirrored to a-d)
+* Incremental accumulator updates with per-perspective bucket-change refresh
 * Optimized forward pass: pre-computed SCReLU activations, transposed L1 weights
 * Embedded net via `include_bytes!` — no external files at runtime
 * Runtime net loading via `EvalFile` UCI option for SPRT testing

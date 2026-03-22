@@ -24,7 +24,7 @@ games/
 # NNUE nets (only the active net is tracked)
 nets/*.nnue
 nets/*.log
-!nets/nn-84a0038bb895.nnue
+!nets/nn-8808c22a8203.nnue
 
 # Claude files
 .claude/plans/

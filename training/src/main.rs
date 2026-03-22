@@ -4,7 +4,7 @@ use bullet::{
             chess::{piecetype::PieceType, r#move::MoveType},
             TrainingDataEntry,
         },
-        inputs::Chess768,
+        inputs::ChessBucketsMirrored,
     },
     nn::optimiser::AdamW,
     trainer::{
@@ -21,6 +21,7 @@ use bullet::value::loader::DataLoader;
 
 const HIDDEN_SIZE: usize = 256;
 const L1_SIZE: usize = 32;
+const NUM_BUCKETS: usize = 8;
 const QA: i16 = 255;
 const QB: i16 = 64;
 const THREADS: usize = 8;
@@ -57,11 +58,20 @@ fn main() {
         println!("No validation data found in data/validation/ — skipping validation loss");
     }
 
+    // 8 king buckets by rank with horizontal mirroring (files e-h mapped to d-a)
+    let buckets: [usize; 32] = {
+        let mut b = [0usize; 32];
+        for i in 0..32 {
+            b[i] = i / 4; // rank = bucket
+        }
+        b
+    };
+
     let mut trainer = ValueTrainerBuilder::default()
         .use_threads(THREADS)
         .dual_perspective()
         .optimiser(AdamW)
-        .inputs(Chess768)
+        .inputs(ChessBucketsMirrored::new(buckets))
         .save_format(&[
             // Feature transform: bullet column-major matches our [feature][hidden] layout
             SavedFormat::id("l0w").round().quantise::<i16>(QA),
@@ -75,7 +85,7 @@ fn main() {
         ])
         .loss_fn(|output, target| output.sigmoid().squared_error(target))
         .build(|builder, stm, ntm| {
-            let l0 = builder.new_affine("l0", 768, HIDDEN_SIZE);
+            let l0 = builder.new_affine("l0", 768 * NUM_BUCKETS, HIDDEN_SIZE);
             let l1 = builder.new_affine("l1", HIDDEN_SIZE * 2, L1_SIZE);
             let l2 = builder.new_affine("l2", L1_SIZE, 1);
 

@@ -17,7 +17,7 @@ use crate::{
         defs::{pawn_push, Move, MoveTypes},
         Movegen,
     },
-    nnue::NnueEval,
+    nnue::{self, NnueEval},
     position::Position,
     time::TimeManager,
 };
@@ -200,6 +200,8 @@ impl Search {
     // ─── NNUE-Aware Move Wrappers ─────────────────────────────────────────────
 
     /// Apply a move with incremental NNUE accumulator updates.
+    /// When a king move crosses a bucket boundary, the moving side's accumulator
+    /// is refreshed from scratch; the opponent's is updated incrementally.
     fn do_move_nnue(&mut self, mv: Move) {
         let us = self.position.side_to_move;
         let them = us ^ 1;
@@ -216,41 +218,89 @@ impl Search {
             self.position.board[to]
         };
 
+        let is_king_move = piece_type == PieceType::KING;
+        let new_king_sq = if is_king_move {
+            if move_type == MoveTypes::CASTLING {
+                if to > from {
+                    from + 2
+                } else {
+                    from - 2
+                }
+            } else {
+                to
+            }
+        } else {
+            0 // unused
+        };
+
+        let refresh_us = is_king_move && nnue::features::needs_refresh(us, from, new_king_sq);
+
         self.nnue.push();
         self.position.do_move(mv);
 
-        match move_type {
-            MoveTypes::CASTLING => {
-                let king_side = to > from;
-                let rook_to = if king_side { to - 2 } else { to + 3 };
-                let king_to = if king_side { from + 2 } else { from - 2 };
+        if is_king_move {
+            self.nnue.update_king_sq(us, new_king_sq);
+        }
 
-                self.nnue.deactivate(us, PieceType::KING, from);
-                self.nnue.deactivate(us, PieceType::ROOK, to); // rook_from = to in move encoding
-                self.nnue.activate(us, PieceType::KING, king_to);
-                self.nnue.activate(us, PieceType::ROOK, rook_to);
-            }
-            MoveTypes::PROMOTION => {
-                let promo_type = mv.promotion_type();
-                self.nnue.deactivate(us, PieceType::PAWN, from);
-                if captured != PieceType::NONE {
-                    self.nnue.deactivate(them, type_of_piece(captured), to);
+        if refresh_us {
+            // Full refresh for moving side's perspective (all features change bucket/mirror)
+            self.nnue.refresh_perspective(us, &self.position);
+
+            // Incremental update for opponent's perspective only
+            match move_type {
+                MoveTypes::CASTLING => {
+                    let king_side = to > from;
+                    let rook_to = if king_side { to - 2 } else { to + 3 };
+                    let king_to = new_king_sq;
+
+                    self.nnue.deactivate_single(them, us, PieceType::KING, from);
+                    self.nnue.deactivate_single(them, us, PieceType::ROOK, to);
+                    self.nnue.activate_single(them, us, PieceType::KING, king_to);
+                    self.nnue.activate_single(them, us, PieceType::ROOK, rook_to);
                 }
-                self.nnue.activate(us, promo_type, to);
-            }
-            MoveTypes::EN_PASSANT => {
-                let captured_sq = (to as isize - pawn_push(us)) as usize;
-                self.nnue.deactivate(us, PieceType::PAWN, from);
-                self.nnue.deactivate(them, PieceType::PAWN, captured_sq);
-                self.nnue.activate(us, PieceType::PAWN, to);
-            }
-            _ => {
-                // Normal move
-                self.nnue.deactivate(us, piece_type, from);
-                if captured != PieceType::NONE {
-                    self.nnue.deactivate(them, type_of_piece(captured), to);
+                _ => {
+                    // Normal king move (possibly capture)
+                    self.nnue.deactivate_single(them, us, PieceType::KING, from);
+                    if captured != PieceType::NONE {
+                        self.nnue.deactivate_single(them, them, type_of_piece(captured), to);
+                    }
+                    self.nnue.activate_single(them, us, PieceType::KING, to);
                 }
-                self.nnue.activate(us, piece_type, to);
+            }
+        } else {
+            // No refresh needed — standard incremental update for both perspectives
+            match move_type {
+                MoveTypes::CASTLING => {
+                    let king_side = to > from;
+                    let rook_to = if king_side { to - 2 } else { to + 3 };
+                    let king_to = if king_side { from + 2 } else { from - 2 };
+
+                    self.nnue.deactivate(us, PieceType::KING, from);
+                    self.nnue.deactivate(us, PieceType::ROOK, to);
+                    self.nnue.activate(us, PieceType::KING, king_to);
+                    self.nnue.activate(us, PieceType::ROOK, rook_to);
+                }
+                MoveTypes::PROMOTION => {
+                    let promo_type = mv.promotion_type();
+                    self.nnue.deactivate(us, PieceType::PAWN, from);
+                    if captured != PieceType::NONE {
+                        self.nnue.deactivate(them, type_of_piece(captured), to);
+                    }
+                    self.nnue.activate(us, promo_type, to);
+                }
+                MoveTypes::EN_PASSANT => {
+                    let captured_sq = (to as isize - pawn_push(us)) as usize;
+                    self.nnue.deactivate(us, PieceType::PAWN, from);
+                    self.nnue.deactivate(them, PieceType::PAWN, captured_sq);
+                    self.nnue.activate(us, PieceType::PAWN, to);
+                }
+                _ => {
+                    self.nnue.deactivate(us, piece_type, from);
+                    if captured != PieceType::NONE {
+                        self.nnue.deactivate(them, type_of_piece(captured), to);
+                    }
+                    self.nnue.activate(us, piece_type, to);
+                }
             }
         }
 

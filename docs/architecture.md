@@ -78,9 +78,9 @@ The engine optionally supports NNUE (Efficiently Updatable Neural Network) evalu
 
 | File | Purpose |
 |------|---------|
-| `src/nnue/mod.rs` | `NnueEval` struct, `evaluate()` entry point |
-| `src/nnue/defs.rs` | Network architecture constants |
-| `src/nnue/features.rs` | Feature index mapping (768-feature set) |
-| `src/nnue/network.rs` | Weight loading, binary format, forward pass |
+| `src/nnue/mod.rs` | `NnueEval` struct, accumulator stack, `evaluate()` entry point |
+| `src/nnue/defs.rs` | Network architecture constants (buckets, feature size, etc.) |
+| `src/nnue/features.rs` | Feature index mapping with king bucketing and horizontal mirroring |
+| `src/nnue/network.rs` | Weight loading, binary format v2, forward pass |
 
-Architecture: `Input(768) → Accumulator(256×2) → Hidden(32) → Output(1)` using integer arithmetic (i16/i32) with clipped ReLU activations. The 768-feature set encodes (color, piece_type, square) tuples, with perspective flipping for the black side. Network weights are loaded from a `.nnue` binary file at startup. If no file is found, the engine falls back to the handcrafted evaluation.
+Architecture: `Input(8×768) → Accumulator(256×2) → Hidden(32) → Output(1)` using integer arithmetic (i16/i32) with SCReLU activations. The input uses 8 king buckets (one per rank) with horizontal mirroring — when a perspective's king is on files e-h, all squares are flipped to files a-d. Each bucket has its own feature transformer weights (768 features × 256 hidden). When a king move crosses a bucket/mirror boundary, the affected perspective's accumulator is recomputed from scratch; otherwise incremental updates apply. Network weights are loaded from a `.nnue` binary file at startup. If no file is found, the engine falls back to the handcrafted evaluation.

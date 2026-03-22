@@ -18,8 +18,8 @@ use crate::{
     search::Search, uci::Uci,
 };
 
-pub const DEFAULT_EVAL_FILE: &str = "nn-84a0038bb895.nnue";
-pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-84a0038bb895.nnue"));
+pub const DEFAULT_EVAL_FILE: &str = "nn-8808c22a8203.nnue";
+pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-8808c22a8203.nnue"));
 
 fn main() {
     println!("Oxide v1.0.0 by Theo Dammaretz");
