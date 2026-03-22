@@ -2,6 +2,18 @@
 
 All notable changes to Oxide are documented in this file.
 
+## v1.1.1
+
+### Time Management
+
+- Capped per-move time allocation to 30% of remaining clock to avoid time losses in fast time controls
+- Added hard stop checks inside aspiration window loop and singular extension to prevent overruns
+- Reduced time check interval from 2048 to 1024 nodes for tighter cutoff granularity
+
+### Performance
+
+- SPRT: +45 Elo over v1.1.0 against Stash
+
 ## v1.1.0
 
 ### NNUE Evaluation
