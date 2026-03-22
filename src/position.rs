@@ -560,6 +560,7 @@ impl Position {
 
     /// Check if a move is pseudo-legal (valid piece movement, ignoring check legality).
     /// Used to validate TT moves and killer moves before calling legal().
+    #[allow(dead_code)]
     pub fn is_pseudo_legal(&self, mv: Move) -> bool {
         let from = mv.from_sq();
         let to = mv.to_sq();

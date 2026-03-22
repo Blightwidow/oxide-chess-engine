@@ -26,6 +26,7 @@ impl Movegen {
     }
 
     /// Generate pseudo-legal captures, en passant, and promotions. Filtered for legality.
+    #[allow(dead_code)]
     pub fn generate_captures(&self, position: &Position) -> MoveList {
         let us = position.side_to_move;
         let them = us ^ 1;
@@ -61,6 +62,7 @@ impl Movegen {
     }
 
     /// Generate pseudo-legal quiet moves (non-captures, non-promotions). Not filtered for legality.
+    #[allow(dead_code)]
     pub fn generate_quiets(&self, position: &Position) -> MoveList {
         let us = position.side_to_move;
         let mut movelist: MoveList = ArrayVec::new();
@@ -257,6 +259,7 @@ impl Movegen {
     }
 
     /// Generate pawn captures, en passant, and promotions (both capture and quiet promotions).
+    #[allow(dead_code)]
     fn generate_pawn_captures(&self, position: &Position, movelist: &mut MoveList, us: Side, target_bb: Bitboard) {
         let them: Side = us ^ 1;
         let up: Direction = match us {
@@ -336,6 +339,7 @@ impl Movegen {
     }
 
     /// Generate quiet pawn moves (single push, double push — no promotions, no captures).
+    #[allow(dead_code)]
     fn generate_pawn_quiets(&self, position: &Position, movelist: &mut MoveList, us: Side, target_bb: Bitboard) {
         let up: Direction = match us {
             Sides::WHITE => Directions::UP,

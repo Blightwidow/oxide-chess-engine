@@ -442,6 +442,9 @@ impl Search {
                                 best_score = score;
                                 current_best_move = Some(mv);
                             }
+                            if self.time.should_stop_hard() {
+                                break;
+                            }
                         }
                         None => {
                             // Time's up
@@ -452,6 +455,9 @@ impl Search {
 
                 // Check if we need to re-search with wider window
                 if current_best_move.is_some() {
+                    if self.time.should_stop_hard() {
+                        break;
+                    }
                     if best_score <= alpha {
                         // Fail low - widen alpha
                         alpha = alpha.saturating_sub(100);
@@ -689,11 +695,12 @@ impl Search {
         // Singular Extensions
         // If the TT move appears uniquely good, extend its search by 1 ply.
         let mut extension: i8 = 0;
+        let se_time_ok = !self.check_time();
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             if !is_pv
                 && ply > 0
                 && depth >= 10
-                && !self.time.should_stop_soft()
+                && se_time_ok
                 && excluded_move == Move::none()
                 && entry.depth >= depth - 3
                 && entry.best_move != Move::none()

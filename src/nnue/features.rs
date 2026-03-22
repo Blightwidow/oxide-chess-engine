@@ -12,6 +12,7 @@ pub fn mirror_horizontal(sq: Square) -> Square {
 
 /// Compute the king bucket (0..7) for a perspective-relative king square.
 /// Mirrors to queen-side first, then returns the rank.
+#[allow(dead_code)]
 pub fn king_bucket(perspective_ksq: Square) -> usize {
     let ksq = if needs_mirror(perspective_ksq) {
         mirror_horizontal(perspective_ksq)

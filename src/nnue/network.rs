@@ -247,9 +247,7 @@ mod test {
         assert!(Network::from_bytes(&bytes[..bytes.len() - 1]).is_none());
     }
 
-    /// This test requires a v2 (bucketed) embedded net. Ignored until one is trained and embedded.
     #[test]
-    #[ignore]
     fn known_position_eval_sanity() {
         use std::rc::Rc;
 
