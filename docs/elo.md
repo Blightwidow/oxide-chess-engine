@@ -23,7 +23,7 @@ Oxide doesn't have an official CCRL rating. To estimate its strength, we run SPR
 
 | Oxide Version | Estimated Elo | Notes |
 |---------------|---------------|-------|
-| v1.1.1 | ~2446 | Time control fix, +45 Elo over v1.1.0 |
+| v1.1.1 | ~2600 | +46 vs Stash v20 (2509), -31 vs Stash v21 (2714) |
 | v1.1.0 | ~2401 | Bucketed NNUE, ~+1 Elo over v1.0.1 |
 | v1.0.1 | ~2400 | History malus, TT age replacement, +19.77 Elo over v1.0.0 |
 | v1.0.0 | ~2400 | SPRT places it -20 elo against Stash v20 (2509) |
