@@ -12,6 +12,20 @@ cargo test                                              # Run tests
 cargo clippy                                            # Lint
 ```
 
+### Quick Performance Check
+
+When changing search or evaluation code, compare nodes/second before and after:
+
+```bash
+cargo build -r --target-dir=base   # Build baseline before changes
+# Make changes...
+cargo build -r                     # Build new version
+echo "bench 16 1 13 5" | ./base/release/oxide    # Baseline (5 positions, depth 13)
+echo "bench 16 1 13 5" | ./target/release/oxide   # After changes
+```
+
+Compare the `Nodes/second` output. Usage: `bench [hash_mb] [threads] [depth] [count]`.
+
 ### SPRT Testing (engine strength regression)
 
 ```bash

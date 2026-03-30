@@ -200,9 +200,14 @@ impl Uci {
         limits.hash_size = args.next().unwrap_or("16").parse::<usize>().unwrap_or(16);
         limits.threads = args.next().unwrap_or("1").parse::<usize>().unwrap_or(1);
         limits.depth = args.next().unwrap_or("13").parse::<u8>().unwrap_or(13);
+        let count = args
+            .next()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(FENS.len())
+            .min(FENS.len());
 
-        for (i, fen) in FENS.iter().enumerate() {
-            println!("\nPosition: {}/{} ({})", i + 1, FENS.len(), fen);
+        for (i, fen) in FENS.iter().take(count).enumerate() {
+            println!("\nPosition: {}/{} ({})", i + 1, count, fen);
             search.eval.transposition_table.clear();
             search.position.set(fen.to_string());
             search.nnue.refresh(&search.position);
