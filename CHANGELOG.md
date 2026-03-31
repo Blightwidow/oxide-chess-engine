@@ -2,6 +2,29 @@
 
 All notable changes to Oxide are documented in this file.
 
+## v1.2.0
+
+### Search
+
+- Fully integrated MovePicker with staged move generation and lazy legality checking
+- Added Probcut: shallow verification search at depth >= 5 with beta + 200 margin and SEE >= 0 filter
+- Granular history-based scaling for LMR, LMP, and futility thresholds
+- Move ordering refined: TT move > good captures (SEE+) > killers > countermove > quiets (history + continuation) > bad captures
+
+### Testing
+
+- Restructured search tests into dedicated test modules: endgame, EPD suites, evaluation, opening, perft, pitfalls, tactics
+- Enabled EPD test suites for position analysis
+
+### Benchmark
+
+- Added smaller benchmark configuration for quick performance checks
+
+### Performance
+
+- SPRT: +22.8 Elo over v1.1.1
+- Estimated strength: ~2625 Elo
+
 ## v1.1.1
 
 ### Time Management

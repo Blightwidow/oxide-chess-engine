@@ -1,6 +1,6 @@
 pub mod defs;
 mod move_picker;
-mod test;
+mod tests;
 
 use std::time;
 
