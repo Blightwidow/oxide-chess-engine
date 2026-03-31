@@ -25,6 +25,26 @@ impl Movegen {
         Self { bitboards }
     }
 
+    /// Compute the check-evasion mask for use by MovePicker.
+    ///
+    /// Returns `FULL` when not in check (all TT/killer moves are allowed),
+    /// `between_bb | checker_sq` for a single check (must block or capture), or
+    /// `EMPTY` for double check (only king moves are legal — non-king TT/killers fail).
+    pub fn check_mask(&self, position: &Position) -> Bitboard {
+        let us = position.side_to_move;
+        let checkers = position.checkers_bb(us);
+        let num_checkers = checkers.count_ones();
+        match num_checkers {
+            0 => FULL,
+            1 => {
+                let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
+                let checker_sq = bits::lsb(checkers);
+                self.bitboards.between_bb[king_square][checker_sq] | square_bb(checker_sq)
+            }
+            _ => EMPTY,
+        }
+    }
+
     /// Generate pseudo-legal captures, en passant, and promotions. Filtered for legality.
     #[allow(dead_code)]
     pub fn generate_captures(&self, position: &Position) -> MoveList {

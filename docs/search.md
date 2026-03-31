@@ -35,6 +35,14 @@ At shallow depths, skip quiet moves that can't possibly raise the score above al
 At shallow depths, skip quiet non-killer moves after a threshold of moves has been searched.
 - **Thresholds per depth**: `[0, 3, 6, 10, 15]`
 
+### Probcut
+If a capture quickly beats beta by a large margin at reduced depth, prune the whole node.
+- **Conditions**: non-PV, not in check, depth >= 5, |beta| < VALUE_MATE - 100, no excluded move
+- **Margin**: beta + 200 cp (`probcut_beta`)
+- **Reduction**: depth - 4
+- **SEE filter**: only tries captures with `SEE >= 0` (non-losing trades)
+- Returns the shallow search score if it proves the position exceeds `probcut_beta`
+
 ### SEE Pruning
 Prunes captures with a negative Static Exchange Evaluation (losing trades).
 - Applied to captures in main search (depth <= 3) and in quiescence search

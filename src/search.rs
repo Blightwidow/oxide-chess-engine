@@ -1,4 +1,5 @@
 pub mod defs;
+mod move_picker;
 mod test;
 
 use std::time;
@@ -21,6 +22,8 @@ use crate::{
     position::Position,
     time::TimeManager,
 };
+
+use self::move_picker::{MovePicker, QMovePicker};
 
 use self::defs::*;
 use crate::time::defs::CHECK_INTERVAL;
@@ -526,57 +529,6 @@ impl Search {
         *entry = (*entry).clamp(-CORRECTION_MAX, CORRECTION_MAX);
     }
 
-    // ─── Move Ordering ────────────────────────────────────────────────────────
-
-    /// Assign a score to a move for ordering. Higher = searched first.
-    /// Priority: TT move (1M) > captures via MVV-LVA (100K+) > promotions (100K+)
-    ///         > killer #1 (90K) > killer #2 (80K) > history heuristic.
-    fn score_move(&self, mv: Move, tt_move: Move, ply: usize, prev_move: Move) -> i32 {
-        // TT move gets highest priority
-        if mv == tt_move && tt_move != Move::none() {
-            return 1_000_000;
-        }
-
-        let to_sq = mv.to_sq();
-        let from_sq = mv.from_sq();
-        let move_type = mv.type_of();
-
-        // Captures: MVV-LVA
-        let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
-        if is_capture {
-            let victim_value = if move_type == MoveTypes::EN_PASSANT {
-                SEE_VALUES[PieceType::PAWN] as i32
-            } else {
-                SEE_VALUES[type_of_piece(self.position.board[to_sq])] as i32
-            };
-            let attacker_value = SEE_VALUES[type_of_piece(self.position.board[from_sq])] as i32;
-            return 100_000 + victim_value * 100 - attacker_value;
-        }
-
-        // Promotions
-        if move_type == MoveTypes::PROMOTION {
-            return 100_000 + SEE_VALUES[mv.promotion_type()] as i32 * 100;
-        }
-
-        // Killers
-        if ply < MAX_PLY {
-            if mv == self.killers[ply][0] {
-                return 90_000;
-            }
-            if mv == self.killers[ply][1] {
-                return 80_000;
-            }
-        }
-
-        // Countermove heuristic
-        if prev_move != Move::none() && mv == self.countermoves[prev_move.from_sq()][prev_move.to_sq()] {
-            return 70_000;
-        }
-
-        // History heuristic
-        self.history[from_sq][to_sq]
-    }
-
     // ─── Alpha-Beta Search ────────────────────────────────────────────────────
 
     /// Main alpha-beta search with PVS, null move pruning, and various forward pruning.
@@ -808,62 +760,112 @@ impl Search {
             }
         }
 
-        let moves = self.movegen.legal_moves(&self.position);
-
-        // Check for terminal positions
-        if moves.is_empty() {
-            if in_check {
-                return Some(-VALUE_MATE + (ply as i16));
-            } else {
-                return Some(VALUE_DRAW);
+        // ── Probcut ───────────────────────────────────────────────────────────
+        // If a capture exists that quickly exceeds beta by a large margin at reduced
+        // depth, prune the whole node. Avoids searching positions that are clearly
+        // too good (false fail-lows won't be missed since the bound is wide).
+        if !is_pv && !in_check && search_depth >= 5 && beta.abs() < VALUE_MATE - 100 && excluded_move == Move::none() {
+            let probcut_beta = beta.saturating_add(200);
+            let probcut_depth = search_depth.saturating_sub(4);
+            let captures = self.movegen.generate_captures(&self.position);
+            let probcut_king_sq = bits::lsb(self.position.by_type_bb[self.position.side_to_move][PieceType::KING]);
+            for &pc_mv in captures.iter() {
+                let pc_to = pc_mv.to_sq();
+                let pc_type = pc_mv.type_of();
+                let pc_is_capture = self.position.board[pc_to] != PieceType::NONE || pc_type == MoveTypes::EN_PASSANT;
+                if !pc_is_capture {
+                    continue;
+                }
+                // generate_captures returns pseudo-legal moves — filter illegal ones
+                // (pinned pieces, king moves into check, etc.) before applying.
+                let us = self.position.side_to_move;
+                let from_bb = square_bb(pc_mv.from_sq());
+                let is_legal = if self.position.pinned_bb[us] & from_bb == EMPTY
+                    && probcut_king_sq != pc_mv.from_sq()
+                    && pc_type != MoveTypes::EN_PASSANT
+                {
+                    true
+                } else {
+                    self.position.legal(pc_mv)
+                };
+                if !is_legal {
+                    continue;
+                }
+                // Quick SEE filter: only try captures that at least break even.
+                // Losing captures can't lift the score to probcut_beta.
+                if self.see(pc_mv) < 0 {
+                    continue;
+                }
+                self.do_move_nnue(pc_mv);
+                let pc_score = self
+                    .alpha_beta(
+                        probcut_depth,
+                        -probcut_beta,
+                        -probcut_beta + 1,
+                        ply + 1,
+                        false,
+                        Move::none(),
+                    )
+                    .map(|s| -s);
+                self.undo_move_nnue(pc_mv);
+                match pc_score {
+                    Some(s) if s >= probcut_beta => return Some(s),
+                    None => return None,
+                    _ => {}
+                }
             }
         }
 
-        // Score moves for ordering
-        let mut scored_moves: ArrayVec<(Move, i32), 256> = moves
-            .iter()
-            .map(|&mv| (mv, self.score_move(mv, tt_move, ply, self.prev_move)))
-            .collect();
+        // ── Staged Move Loop (MovePicker) ─────────────────────────────────────
+        // Lazy generation: TT move → captures → killers/countermove → quiets.
+        // Avoids generating quiets entirely when a beta cutoff happens in captures.
+        let check_mask = self.movegen.check_mask(&self.position);
+        let ply_killers = if ply < MAX_PLY {
+            self.killers[ply]
+        } else {
+            [Move::none(); 2]
+        };
+        let ply_countermove = if self.prev_move != Move::none() {
+            self.countermoves[self.prev_move.from_sq()][self.prev_move.to_sq()]
+        } else {
+            Move::none()
+        };
+        let mut picker = MovePicker::new(tt_move, ply_killers, ply_countermove, check_mask);
 
         let original_alpha = alpha;
         let mut best_move = Move::none();
         let mut best_score = -VALUE_INFINITE;
+        let mut moves_searched = 0usize;
         let mut quiet_moves_tried: ArrayVec<Move, 64> = ArrayVec::new();
 
         // ── Move Loop ─────────────────────────────────────────────────────────
-        // Incremental selection sort: pick the highest-scored move each iteration
-        // (cheaper than full sort since beta cutoffs prune most moves).
-        for (moves_searched, i) in (0..scored_moves.len()).enumerate() {
-            let mut best_idx = i;
-            for j in (i + 1)..scored_moves.len() {
-                if scored_moves[j].1 > scored_moves[best_idx].1 {
-                    best_idx = j;
-                }
-            }
-            scored_moves.swap(i, best_idx);
-
-            let mv = scored_moves[i].0;
-
+        while let Some(mv) = picker.next(&self.position, &self.movegen, &self.history) {
             // Skip excluded move (used by singular extension verification search)
             if mv == excluded_move {
                 continue;
             }
-
-            let move_score = scored_moves[i].1;
 
             // Check capture/promotion before do_move since board changes
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();
             let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
             let is_promotion = move_type == MoveTypes::PROMOTION;
-            let is_killer = move_score == 90_000 || move_score == 80_000 || move_score == 70_000;
             let is_quiet = !is_capture && !is_promotion;
+            // A move is "killer-class" if it's a quiet move that got special ordering
+            // (killer slot or countermove) — these are not subject to LMP/futility.
+            let is_killer = is_quiet
+                && ply < MAX_PLY
+                && (mv == self.killers[ply][0]
+                    || mv == self.killers[ply][1]
+                    || (self.prev_move != Move::none()
+                        && mv == self.countermoves[self.prev_move.from_sq()][self.prev_move.to_sq()]));
 
             // Futility Pruning: at low depth, skip quiet moves when static eval + margin
             // can't reach alpha (the move won't improve the situation enough).
             if !is_pv && !in_check && is_quiet && !is_killer && moves_searched > 0 && search_depth <= 2 {
                 let futility_margin = if search_depth == 1 { 200_i16 } else { 400_i16 };
                 if static_eval + futility_margin <= alpha {
+                    picker.skip_quiets = true;
                     continue;
                 }
             }
@@ -877,10 +879,11 @@ impl Search {
                 && search_depth <= 4
                 && moves_searched >= LMP_THRESHOLDS[search_depth as usize] + if improving { 2 } else { 0 }
             {
+                picker.skip_quiets = true;
                 continue;
             }
 
-            // SEE Pruning: skip captures that lose material (e.g. QxP when P is defended).
+            // SEE Pruning: skip losing captures at shallow depth.
             if !is_pv && !in_check && is_capture && moves_searched > 0 && search_depth <= 3 && self.see(mv) < 0 {
                 continue;
             }
@@ -1016,6 +1019,17 @@ impl Search {
                     return None;
                 }
             }
+
+            moves_searched += 1;
+        }
+
+        // Terminal position: no legal move was found
+        if moves_searched == 0 && best_move == Move::none() {
+            if in_check {
+                return Some(-VALUE_MATE + (ply as i16));
+            } else {
+                return Some(VALUE_DRAW);
+            }
         }
 
         // ── TT Store ──────────────────────────────────────────────────────────
@@ -1070,32 +1084,10 @@ impl Search {
             alpha = stand_pat;
         }
 
-        let moves = self.movegen.legal_moves(&self.position);
+        let check_mask = self.movegen.check_mask(&self.position);
+        let mut picker = QMovePicker::new(Move::none(), check_mask);
 
-        // Filter to captures and en passant only (not quiet promotions)
-        let mut scored_moves: ArrayVec<(Move, i32), 256> = ArrayVec::new();
-        for &mv in moves.iter() {
-            let to_sq = mv.to_sq();
-            let move_type = mv.type_of();
-            let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
-
-            if is_capture {
-                let score = self.score_move(mv, Move::none(), ply, Move::none());
-                scored_moves.push((mv, score));
-            }
-        }
-
-        // Incremental selection sort
-        for i in 0..scored_moves.len() {
-            let mut best_idx = i;
-            for j in (i + 1)..scored_moves.len() {
-                if scored_moves[j].1 > scored_moves[best_idx].1 {
-                    best_idx = j;
-                }
-            }
-            scored_moves.swap(i, best_idx);
-
-            let mv = scored_moves[i].0;
+        while let Some(mv) = picker.next(&self.position, &self.movegen) {
             let move_type = mv.type_of();
 
             // Delta Pruning: skip captures where even capturing the piece + a 200cp margin

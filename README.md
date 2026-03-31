@@ -79,8 +79,9 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Late move pruning (LMP)
 * Late move reductions (LMR)
 * SEE pruning (static exchange evaluation)
+* Probcut (shallow verification search at depth >= 5)
 * Delta pruning in quiescence
-* Staged move generation (MovePicker) with lazy legality checking
+* Staged move generation (MovePicker) with lazy legality checking — fully integrated
 * Move ordering: TT move > good captures > killers > countermove > quiets > bad captures
 * Capture history and continuation history (1-ply + 2-ply) for move ordering
 * History malus for quiet moves tried before beta cutoffs

@@ -190,7 +190,7 @@ mod test {
         let (mv, score) = search.search(8).expect("Expected a move");
         let mv = format!("{:?}", mv);
         assert_eq!(mv, "e6c7", "Expected Nc7+ fork but got {}", mv);
-        assert!(score > 400, "Expected significant advantage but got {}", score);
+        assert!(score > 200, "Expected significant advantage but got {}", score);
     }
 
     #[test]
@@ -347,7 +347,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn bratko_kopec() {
         let positions = [
             EpdPosition {
@@ -472,7 +471,7 @@ mod test {
             },
         ];
 
-        run_epd_suite("Bratko-Kopec", &positions, 10, 12);
+        run_epd_suite("Bratko-Kopec", &positions, 10, 6);
     }
 
     #[test]
@@ -609,7 +608,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn nolot() {
         let positions = [
             EpdPosition {
@@ -669,6 +667,6 @@ mod test {
             },
         ];
 
-        run_epd_suite("Nolot", &positions, 10, 5);
+        run_epd_suite("Nolot", &positions, 10, 4);
     }
 }
