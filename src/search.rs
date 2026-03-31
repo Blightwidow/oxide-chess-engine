@@ -64,6 +64,26 @@ const CORRECTION_MAX: i32 = 256 * 32;
 /// Granularity for correction history values (fixed-point scaling)
 const CORRECTION_GRAIN: i32 = 256;
 
+/// Apply a history gravity update: adds bonus while naturally decaying toward zero.
+/// Keeps values bounded within approximately ±16384.
+#[inline]
+fn update_gravity(entry: &mut i32, bonus: i32) {
+    *entry += bonus - bonus * (*entry).abs() / 16384;
+}
+
+/// Allocate a zeroed continuation history table directly on the heap.
+/// Avoids creating the ~800KB array on the stack (which causes stack overflow).
+fn new_conthist() -> Box<[[[[i32; 64]; 7]; 64]; 7]> {
+    unsafe {
+        let layout = std::alloc::Layout::new::<[[[[i32; 64]; 7]; 64]; 7]>();
+        let ptr = std::alloc::alloc_zeroed(layout) as *mut [[[[i32; 64]; 7]; 64]; 7];
+        if ptr.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
+        Box::from_raw(ptr)
+    }
+}
+
 // ─── Search State ────────────────────────────────────────────────────────────
 
 pub struct Search {
@@ -92,6 +112,16 @@ pub struct Search {
     countermoves: [[Move; 64]; 64],
     /// Previous move played (for countermove heuristic)
     prev_move: Move,
+    /// Continuation history 1-ply back: [prev_piece_type][prev_to_sq][cur_piece_type][cur_to_sq]
+    conthist_1ply: Box<[[[[i32; 64]; 7]; 64]; 7]>,
+    /// Continuation history 2-ply back: [grandparent_piece_type][grandparent_to_sq][cur_piece_type][cur_to_sq]
+    conthist_2ply: Box<[[[[i32; 64]; 7]; 64]; 7]>,
+    /// Capture history: [piece_type][to_sq][victim_type]
+    capture_history: Box<[[[i32; 7]; 64]; 7]>,
+    /// Piece type of move made at each ply (for continuation history lookups)
+    ply_piece_type: [usize; MAX_PLY],
+    /// Destination square of move made at each ply (for continuation history lookups)
+    ply_to_square: [usize; MAX_PLY],
 }
 
 impl Search {
@@ -122,6 +152,11 @@ impl Search {
             static_eval_stack: [0i16; MAX_PLY],
             countermoves: [[Move::none(); 64]; 64],
             prev_move: Move::none(),
+            conthist_1ply: new_conthist(),
+            conthist_2ply: new_conthist(),
+            capture_history: Box::new([[[0i32; 7]; 64]; 7]),
+            ply_piece_type: [PieceType::NONE; MAX_PLY],
+            ply_to_square: [0; MAX_PLY],
         };
         search.position.set(FEN_START_POSITION.to_string());
         search.nnue.refresh(&search.position);
@@ -147,6 +182,11 @@ impl Search {
         self.countermoves = [[Move::none(); 64]; 64];
         self.prev_move = Move::none();
         self.static_eval_stack = [0i16; MAX_PLY];
+        self.conthist_1ply = new_conthist();
+        self.conthist_2ply = new_conthist();
+        *self.capture_history = [[[0i32; 7]; 64]; 7];
+        self.ply_piece_type = [PieceType::NONE; MAX_PLY];
+        self.ply_to_square = [0; MAX_PLY];
         self.nodes_until_check = CHECK_INTERVAL;
 
         // Increment TT generation for age-based replacement
@@ -431,6 +471,9 @@ impl Search {
                 move_scores.clear();
 
                 for &mv in sorted_moves.iter() {
+                    // Store root move info for continuation history
+                    self.ply_piece_type[0] = type_of_piece(self.position.board[mv.from_sq()]);
+                    self.ply_to_square[0] = mv.to_sq();
                     self.do_move_nnue(mv);
                     let score = self
                         .alpha_beta(current_depth - 1, -beta, -alpha, 1, true, Move::none())
@@ -793,7 +836,7 @@ impl Search {
                 }
                 // Quick SEE filter: only try captures that at least break even.
                 // Losing captures can't lift the score to probcut_beta.
-                if self.see(pc_mv) < 0 {
+                if see(&self.position, pc_mv) < 0 {
                     continue;
                 }
                 self.do_move_nnue(pc_mv);
@@ -817,7 +860,7 @@ impl Search {
         }
 
         // ── Staged Move Loop (MovePicker) ─────────────────────────────────────
-        // Lazy generation: TT move → captures → killers/countermove → quiets.
+        // Lazy generation: TT move → good captures → killers/countermove → quiets → bad captures.
         // Avoids generating quiets entirely when a beta cutoff happens in captures.
         let check_mask = self.movegen.check_mask(&self.position);
         let ply_killers = if ply < MAX_PLY {
@@ -837,9 +880,38 @@ impl Search {
         let mut best_score = -VALUE_INFINITE;
         let mut moves_searched = 0usize;
         let mut quiet_moves_tried: ArrayVec<Move, 64> = ArrayVec::new();
+        let mut captures_tried: ArrayVec<(usize, usize, usize), 32> = ArrayVec::new(); // (piece_type, to_sq, victim_type)
+
+        // Precompute continuation history indices for this ply
+        let ch1_idx = if ply >= 1 {
+            Some((self.ply_piece_type[ply - 1], self.ply_to_square[ply - 1]))
+        } else {
+            None
+        };
+        let ch2_idx = if ply >= 2 {
+            Some((self.ply_piece_type[ply - 2], self.ply_to_square[ply - 2]))
+        } else {
+            None
+        };
 
         // ── Move Loop ─────────────────────────────────────────────────────────
-        while let Some(mv) = picker.next(&self.position, &self.movegen, &self.history) {
+        loop {
+            let mv = {
+                let ch1 = ch1_idx.map(|(piece, to)| &self.conthist_1ply[piece][to]);
+                let ch2 = ch2_idx.map(|(piece, to)| &self.conthist_2ply[piece][to]);
+                match picker.next(
+                    &self.position,
+                    &self.movegen,
+                    &self.history,
+                    ch1,
+                    ch2,
+                    &self.capture_history,
+                ) {
+                    Some(mv) => mv,
+                    None => break,
+                }
+            };
+
             // Skip excluded move (used by singular extension verification search)
             if mv == excluded_move {
                 continue;
@@ -851,6 +923,16 @@ impl Search {
             let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
             let is_promotion = move_type == MoveTypes::PROMOTION;
             let is_quiet = !is_capture && !is_promotion;
+            let piece_type = type_of_piece(self.position.board[mv.from_sq()]);
+            let victim_type = if is_capture {
+                if move_type == MoveTypes::EN_PASSANT {
+                    PieceType::PAWN
+                } else {
+                    type_of_piece(self.position.board[to_sq])
+                }
+            } else {
+                PieceType::NONE
+            };
             // A move is "killer-class" if it's a quiet move that got special ordering
             // (killer slot or countermove) — these are not subject to LMP/futility.
             let is_killer = is_quiet
@@ -884,13 +966,30 @@ impl Search {
             }
 
             // SEE Pruning: skip losing captures at shallow depth.
-            if !is_pv && !in_check && is_capture && moves_searched > 0 && search_depth <= 3 && self.see(mv) < 0 {
+            if !is_pv
+                && !in_check
+                && is_capture
+                && moves_searched > 0
+                && search_depth <= 3
+                && see(&self.position, mv) < 0
+            {
                 continue;
             }
 
             // Track quiet moves for history malus on beta cutoff
             if is_quiet && quiet_moves_tried.len() < quiet_moves_tried.capacity() {
                 quiet_moves_tried.push(mv);
+            }
+
+            // Track captures for capture history malus on beta cutoff
+            if is_capture && captures_tried.len() < captures_tried.capacity() {
+                captures_tried.push((piece_type, to_sq, victim_type));
+            }
+
+            // Store ply move info for continuation history before recursive call
+            if ply < MAX_PLY {
+                self.ply_piece_type[ply] = piece_type;
+                self.ply_to_square[ply] = to_sq;
             }
 
             self.do_move_nnue(mv);
@@ -915,8 +1014,8 @@ impl Search {
                     if !improving {
                         r += 1;
                     }
-                    // Reduce less for high-history moves, more for low-history
-                    let hist = self.history[mv.from_sq()][mv.to_sq()];
+                    // History-based LMR adjustment: reduce less for high-history moves
+                    let hist = self.history[mv.from_sq()][to_sq];
                     r -= (hist / 5000).clamp(-1, 1) as i8;
                     r.max(0).min((search_depth as i8) - 2) as u8
                 } else {
@@ -976,24 +1075,45 @@ impl Search {
                         best_move = mv;
                     }
                     if score >= beta {
-                        // Beta cutoff — update killer moves and history table for quiet moves
-                        let is_capture =
-                            self.position.board[mv.to_sq()] != PieceType::NONE || mv.type_of() == MoveTypes::EN_PASSANT;
-                        if !is_capture && ply < MAX_PLY {
-                            self.killers[ply][1] = self.killers[ply][0];
-                            self.killers[ply][0] = mv;
-                            // History gravity: keeps values bounded with natural decay
-                            let bonus = (search_depth as i32) * (search_depth as i32);
-                            let entry = &mut self.history[mv.from_sq()][mv.to_sq()];
-                            *entry += bonus - bonus * (*entry).abs() / 16384;
-                            // History malus: penalize quiet moves tried before cutoff
-                            let malus = -bonus;
-                            for &tried_mv in quiet_moves_tried.iter() {
-                                if tried_mv != mv {
-                                    let e = &mut self.history[tried_mv.from_sq()][tried_mv.to_sq()];
-                                    *e += malus - malus * (*e).abs() / 16384;
+                        let bonus = (search_depth as i32) * (search_depth as i32);
+
+                        if is_capture {
+                            // Capture history: bonus for cutoff capture, malus for tried captures
+                            update_gravity(&mut self.capture_history[piece_type][to_sq][victim_type], bonus);
+                            for &(tried_pt, tried_to, tried_vt) in captures_tried.iter() {
+                                if !(tried_pt == piece_type && tried_to == to_sq && tried_vt == victim_type) {
+                                    update_gravity(&mut self.capture_history[tried_pt][tried_to][tried_vt], -bonus);
                                 }
                             }
+                        } else if ply < MAX_PLY {
+                            // Quiet beta cutoff: update killers, history, continuation history
+                            self.killers[ply][1] = self.killers[ply][0];
+                            self.killers[ply][0] = mv;
+
+                            // Main history + continuation history bonus
+                            update_gravity(&mut self.history[mv.from_sq()][to_sq], bonus);
+                            if let Some((pp, pt)) = ch1_idx {
+                                update_gravity(&mut self.conthist_1ply[pp][pt][piece_type][to_sq], bonus);
+                            }
+                            if let Some((gp, gt)) = ch2_idx {
+                                update_gravity(&mut self.conthist_2ply[gp][gt][piece_type][to_sq], bonus);
+                            }
+
+                            // History malus: penalize quiet moves tried before cutoff
+                            for &tried_mv in quiet_moves_tried.iter() {
+                                if tried_mv != mv {
+                                    let tried_pt = type_of_piece(self.position.board[tried_mv.from_sq()]);
+                                    let tried_to = tried_mv.to_sq();
+                                    update_gravity(&mut self.history[tried_mv.from_sq()][tried_to], -bonus);
+                                    if let Some((pp, pt)) = ch1_idx {
+                                        update_gravity(&mut self.conthist_1ply[pp][pt][tried_pt][tried_to], -bonus);
+                                    }
+                                    if let Some((gp, gt)) = ch2_idx {
+                                        update_gravity(&mut self.conthist_2ply[gp][gt][tried_pt][tried_to], -bonus);
+                                    }
+                                }
+                            }
+
                             // Countermove heuristic
                             if self.prev_move != Move::none() {
                                 self.countermoves[self.prev_move.from_sq()][self.prev_move.to_sq()] = mv;
@@ -1105,7 +1225,7 @@ impl Search {
             }
 
             // SEE pruning in quiescence
-            if move_type != MoveTypes::PROMOTION && self.see(mv) < 0 {
+            if move_type != MoveTypes::PROMOTION && see(&self.position, mv) < 0 {
                 continue;
             }
 
@@ -1130,127 +1250,123 @@ impl Search {
 
         Some(alpha)
     }
+}
 
-    // ─── Static Exchange Evaluation (SEE) ──────────────────────────────────────
+// ─── Static Exchange Evaluation (SEE) ──────────────────────────────────────
 
-    /// Evaluate a capture exchange on a square by simulating all recaptures.
-    /// Returns the material gain/loss from the attacker's perspective.
-    ///
-    /// Algorithm: iteratively find the least valuable attacker for each side,
-    /// build a gain[] array, then minimax walk-back to determine if either side
-    /// can choose to stop the exchange for a better result.
-    fn see(&self, mv: Move) -> i16 {
-        let from = mv.from_sq();
-        let to = mv.to_sq();
-        let move_type = mv.type_of();
+/// Evaluate a capture exchange on a square by simulating all recaptures.
+/// Returns the material gain/loss from the attacker's perspective.
+///
+/// Free function so it's accessible from both search and move_picker.
+fn see(position: &Position, mv: Move) -> i16 {
+    let from = mv.from_sq();
+    let to = mv.to_sq();
+    let move_type = mv.type_of();
 
-        // Determine the initial captured piece value
-        let mut gain = [0i16; 32];
-        gain[0] = if move_type == MoveTypes::EN_PASSANT {
-            SEE_VALUES[PieceType::PAWN]
-        } else if move_type == MoveTypes::PROMOTION {
-            // For promotions, gain includes the promotion value minus the pawn
-            SEE_VALUES[type_of_piece(self.position.board[to])] + SEE_VALUES[PieceType::QUEEN]
-                - SEE_VALUES[PieceType::PAWN]
-        } else {
-            SEE_VALUES[type_of_piece(self.position.board[to])]
-        };
+    // Determine the initial captured piece value
+    let mut gain = [0i16; 32];
+    gain[0] = if move_type == MoveTypes::EN_PASSANT {
+        SEE_VALUES[PieceType::PAWN]
+    } else if move_type == MoveTypes::PROMOTION {
+        SEE_VALUES[type_of_piece(position.board[to])] + SEE_VALUES[PieceType::QUEEN] - SEE_VALUES[PieceType::PAWN]
+    } else {
+        SEE_VALUES[type_of_piece(position.board[to])]
+    };
 
-        let mut side_to_move = color_of_piece(self.position.board[from]);
-        let mut occupied = self.position.by_color_bb[Sides::BOTH];
+    let mut side_to_move = color_of_piece(position.board[from]);
+    let mut occupied = position.by_color_bb[Sides::BOTH];
 
-        // Remove the initial attacker from occupied
-        occupied ^= square_bb(from);
+    // Remove the initial attacker from occupied
+    occupied ^= square_bb(from);
 
-        // For en passant, also remove the captured pawn
-        if move_type == MoveTypes::EN_PASSANT {
-            let ep_sq = (to as isize - pawn_push(side_to_move)) as usize;
-            occupied ^= square_bb(ep_sq);
-        }
-
-        let mut attackers = self.position.attackers_to(to, occupied);
-        let mut attacker_piece_type = if move_type == MoveTypes::PROMOTION {
-            PieceType::QUEEN
-        } else {
-            type_of_piece(self.position.board[from])
-        };
-
-        let mut depth = 0usize;
-        side_to_move ^= 1;
-
-        loop {
-            depth += 1;
-            if depth >= 32 {
-                break;
-            }
-
-            // Speculative store: assume current attacker gets captured next
-            gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
-
-            // Pruning: if neither side can improve, stop early
-            if (-gain[depth]).max(gain[depth - 1]) < 0 {
-                break;
-            }
-
-            // Find least valuable attacker for current side
-            let my_attackers = attackers & self.position.by_color_bb[side_to_move];
-            if my_attackers == EMPTY {
-                break;
-            }
-
-            // Find least valuable piece type
-            attacker_piece_type = PieceType::NONE;
-            let mut from_bb = EMPTY;
-            for pt in [
-                PieceType::PAWN,
-                PieceType::KNIGHT,
-                PieceType::BISHOP,
-                PieceType::ROOK,
-                PieceType::QUEEN,
-                PieceType::KING,
-            ] {
-                from_bb = my_attackers & self.position.by_type_bb[side_to_move][pt];
-                if from_bb != EMPTY {
-                    attacker_piece_type = pt;
-                    break;
-                }
-            }
-
-            if attacker_piece_type == PieceType::NONE {
-                break;
-            }
-
-            // Remove attacker from occupied to reveal x-ray attackers behind it
-            let attacker_sq = bits::lsb(from_bb);
-            occupied ^= square_bb(attacker_sq);
-
-            // Recompute sliding attackers through the now-empty square
-            if attacker_piece_type == PieceType::PAWN
-                || attacker_piece_type == PieceType::BISHOP
-                || attacker_piece_type == PieceType::QUEEN
-            {
-                attackers |= self.position.attack_bb(make_piece(0, PieceType::BISHOP), to, occupied)
-                    & (self.position.by_type_bb[Sides::BOTH][PieceType::BISHOP]
-                        | self.position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
-            }
-            if attacker_piece_type == PieceType::ROOK || attacker_piece_type == PieceType::QUEEN {
-                attackers |= self.position.attack_bb(make_piece(0, PieceType::ROOK), to, occupied)
-                    & (self.position.by_type_bb[Sides::BOTH][PieceType::ROOK]
-                        | self.position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
-            }
-
-            // Remove used attacker from attackers set
-            attackers &= occupied;
-
-            side_to_move ^= 1;
-        }
-
-        // Minimax walk-back: each side can choose to stop the exchange
-        while depth > 1 {
-            depth -= 1;
-            gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
-        }
-
-        gain[0]
+    // For en passant, also remove the captured pawn
+    if move_type == MoveTypes::EN_PASSANT {
+        let ep_sq = (to as isize - pawn_push(side_to_move)) as usize;
+        occupied ^= square_bb(ep_sq);
     }
+
+    let mut attackers = position.attackers_to(to, occupied);
+    let mut attacker_piece_type = if move_type == MoveTypes::PROMOTION {
+        PieceType::QUEEN
+    } else {
+        type_of_piece(position.board[from])
+    };
+
+    let mut depth = 0usize;
+    side_to_move ^= 1;
+
+    loop {
+        depth += 1;
+        if depth >= 32 {
+            break;
+        }
+
+        // Speculative store: assume current attacker gets captured next
+        gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
+
+        // Pruning: if neither side can improve, stop early
+        if (-gain[depth]).max(gain[depth - 1]) < 0 {
+            break;
+        }
+
+        // Find least valuable attacker for current side
+        let my_attackers = attackers & position.by_color_bb[side_to_move];
+        if my_attackers == EMPTY {
+            break;
+        }
+
+        // Find least valuable piece type
+        attacker_piece_type = PieceType::NONE;
+        let mut from_bb = EMPTY;
+        for pt in [
+            PieceType::PAWN,
+            PieceType::KNIGHT,
+            PieceType::BISHOP,
+            PieceType::ROOK,
+            PieceType::QUEEN,
+            PieceType::KING,
+        ] {
+            from_bb = my_attackers & position.by_type_bb[side_to_move][pt];
+            if from_bb != EMPTY {
+                attacker_piece_type = pt;
+                break;
+            }
+        }
+
+        if attacker_piece_type == PieceType::NONE {
+            break;
+        }
+
+        // Remove attacker from occupied to reveal x-ray attackers behind it
+        let attacker_sq = bits::lsb(from_bb);
+        occupied ^= square_bb(attacker_sq);
+
+        // Recompute sliding attackers through the now-empty square
+        if attacker_piece_type == PieceType::PAWN
+            || attacker_piece_type == PieceType::BISHOP
+            || attacker_piece_type == PieceType::QUEEN
+        {
+            attackers |= position.attack_bb(make_piece(0, PieceType::BISHOP), to, occupied)
+                & (position.by_type_bb[Sides::BOTH][PieceType::BISHOP]
+                    | position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
+        }
+        if attacker_piece_type == PieceType::ROOK || attacker_piece_type == PieceType::QUEEN {
+            attackers |= position.attack_bb(make_piece(0, PieceType::ROOK), to, occupied)
+                & (position.by_type_bb[Sides::BOTH][PieceType::ROOK]
+                    | position.by_type_bb[Sides::BOTH][PieceType::QUEEN]);
+        }
+
+        // Remove used attacker from attackers set
+        attackers &= occupied;
+
+        side_to_move ^= 1;
+    }
+
+    // Minimax walk-back: each side can choose to stop the exchange
+    while depth > 1 {
+        depth -= 1;
+        gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
+    }
+
+    gain[0]
 }

@@ -82,10 +82,10 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Probcut (shallow verification search at depth >= 5)
 * Delta pruning in quiescence
 * Staged move generation (MovePicker) with lazy legality checking — fully integrated
-* Move ordering: TT move > good captures > killers > countermove > quiets > bad captures
-* Capture history and continuation history (1-ply + 2-ply) for move ordering
-* History malus for quiet moves tried before beta cutoffs
-* Granular history-based scaling for LMR, LMP, and futility thresholds
+* Move ordering: TT move > captures (MVV-LVA + capture history) > killers > countermove > quiets (history + continuation history)
+* Continuation history (1-ply + 2-ply) for quiet move ordering
+* Capture history for capture move ordering
+* History malus for quiet/capture moves tried before beta cutoffs
 
 ### Evaluation
 

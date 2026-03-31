@@ -72,11 +72,10 @@ Good move ordering is critical for alpha-beta efficiency. Moves are generated in
 | Stage | Description |
 |-------|-------------|
 | 1 | TT move |
-| 2 | Good captures (positive SEE, scored by MVV-LVA + capture history) |
+| 2 | Captures (scored by MVV-LVA + capture history) |
 | 3 | Killer moves (1st, 2nd) |
 | 4 | Countermove |
 | 5 | Quiet moves (history + continuation history) |
-| 6 | Bad captures (negative SEE) |
 
 ### Killer Heuristic
 Two killer moves stored per ply. Updated on beta cutoffs for quiet moves.
@@ -90,11 +89,8 @@ A `[piece][to_square][captured_piece_type]` table. Updated on beta cutoffs for c
 ### Continuation History
 Two tables tracking move pair correlations: **1-ply** (previous move → current move) and **2-ply** (two moves ago → current move). Indexed by `[prev_piece_type][prev_to_sq][curr_piece_type][curr_to_sq]`. Used to score quiet moves alongside the main history table.
 
-### Granular History in Pruning
-History scores are used to dynamically adjust pruning thresholds:
-- **LMR**: Reductions adjusted by a continuous `history / 5000` term
-- **LMP**: History scores scale the late move count threshold
-- **Futility pruning**: History scores scale the futility margin
+### History in LMR
+Main history scores adjust LMR reductions: `r -= (history / 5000).clamp(-1, 1)`. High-history moves are reduced less, low-history moves are reduced more.
 
 ## Quiescence Search
 

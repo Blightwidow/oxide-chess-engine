@@ -91,10 +91,16 @@ Current search features (see `docs/search.md` for details):
 - Negamax with alpha-beta, iterative deepening, aspiration windows, PVS
 - Null move pruning, reverse futility pruning, razoring, futility pruning
 - Late move pruning (LMP), late move reductions (LMR)
-- SEE pruning, delta pruning in quiescence
-- Check extensions
-- Move ordering: TT move > MVV-LVA captures > killer moves > history heuristic
+- Probcut, SEE pruning, delta pruning in quiescence
+- Singular extensions, check extensions, IIR
+- Move ordering: TT move > captures (MVV-LVA + capture history) > killers/countermove > quiets (history + continuation history)
+- Continuation history (1-ply + 2-ply), capture history, correction history
 - Quiescence search (captures, en passant, promotions)
+
+## Development Notes
+
+- **Large heap arrays**: Never use `Box::new(large_array)` for arrays >100KB — it creates the value on the stack first, causing stack overflow. Use `alloc_zeroed` + `Box::from_raw` (see `new_conthist()` in `search.rs` for the pattern).
+- **Move loop borrows**: The move loop uses a `loop { let mv = { ... }; ... }` pattern so that shared borrows of history tables (for `MovePicker::next`) are released before mutable borrows (for history updates on beta cutoff). Don't refactor this back to `while let`.
 
 ## Conventions
 

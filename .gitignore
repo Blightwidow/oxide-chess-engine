@@ -28,3 +28,4 @@ nets/*.log
 
 # Claude files
 .claude/plans/
+autoresearch/

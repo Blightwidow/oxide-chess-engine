@@ -21,19 +21,22 @@ const STAGE_GOOD_CAPTURES: u8 = 2;
 const STAGE_KILLERS: u8 = 3;
 const STAGE_GENERATE_QUIETS: u8 = 4;
 const STAGE_QUIETS: u8 = 5;
-const STAGE_DONE: u8 = 6;
+const STAGE_BAD_CAPTURES: u8 = 6;
+const STAGE_DONE: u8 = 7;
 
 /// Staged move picker for alpha-beta search.
-/// Yields moves lazily: TT move → captures → killers/countermove → quiets.
-/// This avoids generating all moves upfront when a beta cutoff happens early.
+/// Yields moves lazily: TT move → good captures → killers/countermove → quiets → bad captures.
+/// Bad captures (SEE < 0) are deferred after quiets to avoid wasting time on losing exchanges.
 pub struct MovePicker {
     stage: u8,
     tt_move: Move,
     killers: [Move; 2],
     countermove: Move,
     captures: ArrayVec<(Move, i32), 256>,
+    bad_captures: ArrayVec<(Move, i32), 256>,
     quiets: ArrayVec<(Move, i32), 256>,
     cap_idx: usize,
+    bad_cap_idx: usize,
     quiet_idx: usize,
     killer_idx: usize,
     /// Check evasion mask: non-king moves must target a square in this mask.
@@ -50,8 +53,10 @@ impl MovePicker {
             killers,
             countermove,
             captures: ArrayVec::new(),
+            bad_captures: ArrayVec::new(),
             quiets: ArrayVec::new(),
             cap_idx: 0,
+            bad_cap_idx: 0,
             quiet_idx: 0,
             killer_idx: 0,
             check_mask,
@@ -61,7 +66,16 @@ impl MovePicker {
 
     /// Get the next move. Returns None when all stages are exhausted.
     /// Performs legality checking: only legal moves are returned.
-    pub fn next(&mut self, position: &Position, movegen: &Movegen, history: &[[i32; 64]; 64]) -> Option<Move> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn next(
+        &mut self,
+        position: &Position,
+        movegen: &Movegen,
+        history: &[[i32; 64]; 64],
+        conthist_1ply: Option<&[[i32; 64]; 7]>,
+        conthist_2ply: Option<&[[i32; 64]; 7]>,
+        capture_history: &[[[i32; 7]; 64]; 7],
+    ) -> Option<Move> {
         loop {
             match self.stage {
                 STAGE_TT_MOVE => {
@@ -75,7 +89,7 @@ impl MovePicker {
                     }
                 }
                 STAGE_GENERATE_CAPTURES => {
-                    self.generate_captures(position, movegen);
+                    self.generate_captures(position, movegen, capture_history);
                     self.stage = STAGE_GOOD_CAPTURES;
                 }
                 STAGE_GOOD_CAPTURES => {
@@ -92,14 +106,14 @@ impl MovePicker {
                         return Some(mv);
                     } else {
                         self.stage = if self.skip_quiets {
-                            STAGE_DONE
+                            STAGE_BAD_CAPTURES
                         } else {
                             STAGE_GENERATE_QUIETS
                         };
                     }
                 }
                 STAGE_GENERATE_QUIETS => {
-                    self.generate_quiets(position, movegen, history);
+                    self.generate_quiets(position, movegen, history, conthist_1ply, conthist_2ply);
                     self.stage = STAGE_QUIETS;
                 }
                 STAGE_QUIETS => {
@@ -112,6 +126,15 @@ impl MovePicker {
                             return Some(mv);
                         }
                     } else {
+                        self.stage = STAGE_BAD_CAPTURES;
+                    }
+                }
+                STAGE_BAD_CAPTURES => {
+                    if let Some(mv) = self.next_bad_capture() {
+                        if mv != self.tt_move {
+                            return Some(mv);
+                        }
+                    } else {
                         self.stage = STAGE_DONE;
                     }
                 }
@@ -120,7 +143,7 @@ impl MovePicker {
         }
     }
 
-    fn generate_captures(&mut self, position: &Position, movegen: &Movegen) {
+    fn generate_captures(&mut self, position: &Position, movegen: &Movegen, capture_history: &[[[i32; 7]; 64]; 7]) {
         let raw = movegen.generate_captures(position);
         let us = position.side_to_move;
         let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
@@ -129,12 +152,37 @@ impl MovePicker {
             if !is_legal_fast(*mv, us, king_square, position) {
                 continue;
             }
-            let score = score_capture(*mv, position);
-            self.captures.push((*mv, score));
+            let mut score = score_capture(*mv, position);
+            let to = mv.to_sq();
+            let move_type = mv.type_of();
+            let is_actual_capture = position.board[to] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
+
+            if is_actual_capture {
+                // Blend capture history with MVV-LVA base score
+                let piece_type = type_of_piece(position.board[mv.from_sq()]);
+                let victim_type = if move_type == MoveTypes::EN_PASSANT {
+                    PieceType::PAWN
+                } else {
+                    type_of_piece(position.board[to])
+                };
+                score += capture_history[piece_type][to][victim_type] / 32;
+
+                self.captures.push((*mv, score));
+            } else {
+                // Quiet promotions always go to good captures
+                self.captures.push((*mv, score));
+            }
         }
     }
 
-    fn generate_quiets(&mut self, position: &Position, movegen: &Movegen, history: &[[i32; 64]; 64]) {
+    fn generate_quiets(
+        &mut self,
+        position: &Position,
+        movegen: &Movegen,
+        history: &[[i32; 64]; 64],
+        conthist_1ply: Option<&[[i32; 64]; 7]>,
+        conthist_2ply: Option<&[[i32; 64]; 7]>,
+    ) {
         let raw = movegen.generate_quiets(position);
         let us = position.side_to_move;
         let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
@@ -143,12 +191,20 @@ impl MovePicker {
             if !is_legal_fast(*mv, us, king_square, position) {
                 continue;
             }
-            let score = history[mv.from_sq()][mv.to_sq()];
+            let piece_type = type_of_piece(position.board[mv.from_sq()]);
+            let to = mv.to_sq();
+            let mut score = history[mv.from_sq()][to];
+            if let Some(ch1) = conthist_1ply {
+                score += ch1[piece_type][to];
+            }
+            if let Some(ch2) = conthist_2ply {
+                score += ch2[piece_type][to];
+            }
             self.quiets.push((*mv, score));
         }
     }
 
-    /// Selection sort: pick highest-scored capture.
+    /// Selection sort: pick highest-scored good capture.
     fn next_capture(&mut self) -> Option<Move> {
         if self.cap_idx >= self.captures.len() {
             return None;
@@ -162,6 +218,23 @@ impl MovePicker {
         self.captures.swap(self.cap_idx, best);
         let mv = self.captures[self.cap_idx].0;
         self.cap_idx += 1;
+        Some(mv)
+    }
+
+    /// Selection sort: pick highest-scored bad capture (deferred after quiets).
+    fn next_bad_capture(&mut self) -> Option<Move> {
+        if self.bad_cap_idx >= self.bad_captures.len() {
+            return None;
+        }
+        let mut best = self.bad_cap_idx;
+        for j in (self.bad_cap_idx + 1)..self.bad_captures.len() {
+            if self.bad_captures[j].1 > self.bad_captures[best].1 {
+                best = j;
+            }
+        }
+        self.bad_captures.swap(self.bad_cap_idx, best);
+        let mv = self.bad_captures[self.bad_cap_idx].0;
+        self.bad_cap_idx += 1;
         Some(mv)
     }
 
