@@ -710,7 +710,7 @@ impl Search {
                 && adjust_mate_score_from_tt(entry.value, ply).abs() < VALUE_MATE - 100
             {
                 let tt_value = adjust_mate_score_from_tt(entry.value, ply);
-                let se_beta = tt_value - (depth as i16) * 3;
+                let se_beta = tt_value - (depth as i16) * 2;
                 let se_depth = (depth - 1) / 2;
 
                 let score = self.alpha_beta(se_depth, se_beta - 1, se_beta, ply, false, entry.best_move);
