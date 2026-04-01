@@ -1019,7 +1019,7 @@ impl Search {
                 let reduction = if do_lmr {
                     let mut r = self.lmr_table[search_depth as usize][moves_searched.min(63)] as i8;
                     if !improving {
-                        r += 1;
+                        r += 2;
                     }
                     // History-based LMR adjustment: reduce less for high-history moves
                     let hist = self.history[mv.from_sq()][to_sq];
