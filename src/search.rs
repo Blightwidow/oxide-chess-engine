@@ -1214,7 +1214,7 @@ impl Search {
         let check_mask = self.movegen.check_mask(&self.position);
         let mut picker = QMovePicker::new(Move::none(), check_mask);
 
-        while let Some(mv) = picker.next(&self.position, &self.movegen) {
+        while let Some(mv) = picker.next(&self.position, &self.movegen, &self.capture_history) {
             let move_type = mv.type_of();
 
             // Delta Pruning: skip captures where even capturing the piece + a 200cp margin
