@@ -668,6 +668,18 @@ impl Search {
             }
         }
 
+        // Mate distance pruning: if we already know a mate at this ply distance, prune.
+        if ply > 0 {
+            let mated_score = -VALUE_MATE + (ply as i16);
+            let mating_score = VALUE_MATE - (ply as i16);
+            if mated_score >= beta {
+                return Some(mated_score);
+            }
+            if mating_score <= alpha {
+                return Some(mating_score);
+            }
+        }
+
         // TT probe
         let zobrist = self.position.zobrist;
         let is_pv = (beta as i32) - (alpha as i32) > 1;
