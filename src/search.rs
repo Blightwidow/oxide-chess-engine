@@ -54,7 +54,7 @@ fn adjust_mate_score_from_tt(score: i16, ply: usize) -> i16 {
 
 const MAX_PLY: usize = 128;
 /// Late Move Pruning: max quiet moves to search at depths 1-4
-const LMP_THRESHOLDS: [usize; 5] = [0, 4, 8, 13, 19];
+const LMP_THRESHOLDS: [usize; 5] = [0, 3, 6, 10, 15];
 /// Piece values used by Static Exchange Evaluation (SEE)
 const SEE_VALUES: [i16; 7] = [0, 100, 300, 300, 500, 900, 20000];
 /// Number of entries in the correction history table (per side)
