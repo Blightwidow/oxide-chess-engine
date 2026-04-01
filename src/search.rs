@@ -1000,7 +1000,6 @@ impl Search {
             }
 
             self.do_move_nnue(mv);
-            let gives_check = self.position.checkers_bb(self.position.side_to_move) != 0;
             let saved_prev_move = self.prev_move;
             self.prev_move = mv;
 
@@ -1015,7 +1014,7 @@ impl Search {
                 // Late Move Reductions (LMR): reduce quiet late moves by a logarithmic
                 // amount. If the reduced search fails high, re-search at full depth.
                 let do_lmr =
-                    !in_check && !is_capture && !is_promotion && !is_killer && !gives_check && moves_searched >= 3 && search_depth >= 3;
+                    !in_check && !is_capture && !is_promotion && !is_killer && moves_searched >= 3 && search_depth >= 3;
 
                 let reduction = if do_lmr {
                     let mut r = self.lmr_table[search_depth as usize][moves_searched.min(63)] as i8;
