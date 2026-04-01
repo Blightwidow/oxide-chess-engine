@@ -1201,33 +1201,6 @@ impl Search {
             self.seldepth = ply;
         }
 
-        // TT probe in qsearch: use cached score if reliable, and get TT move for ordering.
-        let zobrist = self.position.zobrist;
-        let original_alpha = alpha;
-        let mut tt_move = Move::none();
-        if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
-            tt_move = entry.best_move;
-            if entry.depth == 0 {
-                let tt_value = adjust_mate_score_from_tt(entry.value, ply);
-                match entry.node_type {
-                    NodeType::Exact => return Some(tt_value),
-                    NodeType::LowerBound => {
-                        if tt_value >= beta {
-                            return Some(tt_value);
-                        }
-                        if tt_value > alpha {
-                            alpha = tt_value;
-                        }
-                    }
-                    NodeType::UpperBound => {
-                        if tt_value <= alpha {
-                            return Some(tt_value);
-                        }
-                    }
-                }
-            }
-        }
-
         // Stand pat: assume we can at least achieve the static eval by not capturing.
         // If it already beats beta, prune. Otherwise use it as alpha floor.
         let stand_pat = self.evaluate_position();
@@ -1239,7 +1212,7 @@ impl Search {
         }
 
         let check_mask = self.movegen.check_mask(&self.position);
-        let mut picker = QMovePicker::new(tt_move, check_mask);
+        let mut picker = QMovePicker::new(Move::none(), check_mask);
 
         while let Some(mv) = picker.next(&self.position, &self.movegen) {
             let move_type = mv.type_of();
@@ -1270,15 +1243,6 @@ impl Search {
             match score {
                 Some(score) => {
                     if score >= beta {
-                        self.eval.transposition_table.store(
-                            zobrist,
-                            HashData {
-                                depth: 0,
-                                value: adjust_mate_score_to_tt(score, ply),
-                                best_move: mv,
-                                node_type: NodeType::LowerBound,
-                            },
-                        );
                         return Some(beta);
                     }
                     if score > alpha {
@@ -1290,21 +1254,6 @@ impl Search {
                 }
             }
         }
-
-        let node_type = if alpha > original_alpha {
-            NodeType::Exact
-        } else {
-            NodeType::UpperBound
-        };
-        self.eval.transposition_table.store(
-            zobrist,
-            HashData {
-                depth: 0,
-                value: adjust_mate_score_to_tt(alpha, ply),
-                best_move: tt_move,
-                node_type,
-            },
-        );
 
         Some(alpha)
     }
