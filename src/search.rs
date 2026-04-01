@@ -717,12 +717,7 @@ impl Search {
 
                 match score {
                     Some(s) if s < se_beta => {
-                        // Very singular: alternative is far below the singular threshold → double extend
-                        if s < se_beta - depth as i16 {
-                            extension = 2;
-                        } else {
-                            extension = 1;
-                        }
+                        extension = 1; // TT move is singular → extend
                     }
                     Some(s) if s >= beta => {
                         return Some(s); // Multi-cut: multiple moves beat beta → prune
