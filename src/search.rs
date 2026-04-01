@@ -1021,6 +1021,9 @@ impl Search {
                     if !improving {
                         r += 1;
                     }
+                    if is_pv {
+                        r -= 1;
+                    }
                     // History-based LMR adjustment: reduce less for high-history moves
                     let hist = self.history[mv.from_sq()][to_sq];
                     r -= (hist / 5000).clamp(-1, 1) as i8;
