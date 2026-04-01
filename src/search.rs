@@ -789,7 +789,7 @@ impl Search {
         // If static eval is far above beta (by margin*depth cp), assume no move will
         // drop the score below beta. Safe to prune the whole subtree.
         if !is_pv && !in_check && search_depth <= 7 && static_eval.abs() < VALUE_MATE - 100 {
-            let rfp_margin = (if improving { 65 } else { 80 }) * (search_depth as i16);
+            let rfp_margin = (if improving { 80 } else { 65 }) * (search_depth as i16);
             if static_eval - rfp_margin >= beta {
                 return Some(static_eval);
             }
