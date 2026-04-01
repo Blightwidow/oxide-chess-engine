@@ -20,8 +20,8 @@ When changing search or evaluation code, compare nodes/second before and after:
 cargo build -r --target-dir=base   # Build baseline before changes
 # Make changes...
 cargo build -r                     # Build new version
-echo "bench 16 1 13 5" | ./base/release/oxide    # Baseline (5 positions, depth 13)
-echo "bench 16 1 13 5" | ./target/release/oxide   # After changes
+printf "bench 16 1 11 5\nquit\n" | ./base/release/oxide 2>&1    # Baseline (5 positions, depth 11)
+printf "bench 16 1 11 5\nquit\n" | ./target/release/oxide 2>&1  # After changes
 ```
 
 Compare the `Nodes/second` output. Usage: `bench [hash_mb] [threads] [depth] [count]`.

@@ -29,6 +29,32 @@ Oxide doesn't have an official CCRL rating. To estimate its strength, we run SPR
 | v1.0.0 | ~2400 | SPRT places it -20 elo against Stash v20 (2509) |
 | v0.2.0 | ~1900 | Barely beats Stash v12 (1886) |
 
+## ERET 15s (Quick Elo Estimation)
+
+The [Eigenmann Rapid Engine Test](https://www.chessprogramming.org/Eigenmann_Rapid_Engine_Test) (ERET) is a 111-position EPD suite where the engine has a fixed time (typically 15 seconds) per position to find the best move. The number of correct answers correlates with engine strength, making it a fast single-machine proxy for Elo without needing a full SPRT match.
+
+### Running ERET
+
+```bash
+cargo build -r
+printf "eret 15\nquit\n" | ./target/release/oxide
+```
+
+The argument is time per position in seconds. A full run at 15s takes ~28 minutes. When using 15s, the engine prints an estimated Elo based on a polynomial regression fitted to the reference data.
+
+### Reference Scores (15s per position)
+
+| Engine | Elo | Score |
+|--------|-----|-------|
+| Stockfish 9 | 3425 | 77/111 |
+| Komodo 12 | 3376 | 75/111 |
+| Booot 6.3 | 3240 | 57/111 |
+| BlackMamba 2.0 | 3091 | 34/111 |
+| Alfil 13.1 | 2748 | 17/111 |
+| Clueless 1.4 | 1840 | 11/111 |
+
+Use this table to interpolate Oxide's approximate Elo from its ERET score. The relationship is roughly linear in the 2000–3400 range.
+
 ## Stash Reference Ratings
 
 Stash blitz ratings from CCRL (entries marked `*` are estimates, not official CCRL ratings):

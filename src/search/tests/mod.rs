@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod endgame;
 #[cfg(test)]
-mod epd;
-#[cfg(test)]
 mod evaluation;
 #[cfg(test)]
 mod opening;

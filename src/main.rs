@@ -1,6 +1,7 @@
 mod benchmark;
 mod bitboards;
 mod defs;
+mod eret;
 mod evaluate;
 mod hash;
 mod misc;

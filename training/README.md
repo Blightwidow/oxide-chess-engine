@@ -43,7 +43,7 @@ When merging binpacks from multiple generation runs, filenames may collide. Use 
 ./training/rename_binpacks.sh
 ```
 
-## Training
+## Training (Rust — CPU only)
 
 Add binpacks in data then run the following command
 
@@ -56,6 +56,41 @@ Then once you are happy, convert a checkpoint using
 
 ```bash
 cargo run --release --bin convert <quantised.bin> ./nets/default.nnue
+```
+
+## Training (PyTorch — MPS/CUDA/CPU)
+
+Faster training using GPU acceleration. Requires Python 3.11-3.13.
+
+### Step 1: Preprocess binpacks
+
+Convert .binpack files to a flat binary format Python can read efficiently:
+
+```bash
+cd training
+cargo run --release --features cpu --no-default-features --bin preprocess
+# Outputs: data/preprocessed.bin
+# Optional: preprocess validation data separately
+cargo run --release --features cpu --no-default-features --bin preprocess data/validation/preprocessed.bin
+```
+
+### Step 2: Train
+
+```bash
+cd training/pytorch
+uv run python train.py ../data/preprocessed.bin --validation ../data/validation/preprocessed.bin
+```
+
+Options:
+- `--superbatches N` — total superbatches (default 60)
+- `--save-rate N` — checkpoint interval (default 10)
+- `--resume checkpoints/oxide-30` — resume from checkpoint
+
+### Step 3: Export
+
+```bash
+cd training/pytorch
+uv run python export.py checkpoints/oxide-60/model.pt ../../nets/default.nnue
 ```
 
 ## SPRT Testing

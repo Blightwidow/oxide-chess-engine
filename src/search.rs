@@ -166,13 +166,44 @@ impl Search {
 
     /// Entry point: reset state, run iterative deepening, and print bestmove.
     pub fn run(&mut self, limits: SearchLimits) {
-        self.start_time = time::Instant::now();
-
         if limits.perft > 0 {
+            self.start_time = time::Instant::now();
             let nodes = self.perft(limits.perft, true);
             println!("\nNodes searched: {}\n", nodes);
             return;
         }
+
+        let result = self.run_and_return(limits);
+
+        if limits.depth > 0 {
+            if let Some(mv) = result {
+                // Probe TT for ponder move
+                self.position.do_move(mv);
+                let ponder = self
+                    .eval
+                    .transposition_table
+                    .probe(self.position.zobrist)
+                    .map(|entry| entry.best_move)
+                    .filter(|m| *m != Move::none());
+                self.position.undo_move(mv);
+
+                if let Some(ponder_mv) = ponder {
+                    println!("bestmove {:?} ponder {:?}", mv, ponder_mv);
+                } else {
+                    println!("bestmove {:?}", mv);
+                }
+            } else {
+                println!("bestmove 0000");
+            }
+        } else {
+            let score = self.evaluate_position();
+            println!("info depth 0 score cp {}", score);
+        }
+    }
+
+    /// Run search and return best move without printing bestmove line.
+    pub fn run_and_return(&mut self, limits: SearchLimits) -> Option<Move> {
+        self.start_time = time::Instant::now();
 
         // Reset per-search state
         self.nodes_searched = 0;
@@ -198,31 +229,7 @@ impl Search {
             self.position.states.last().unwrap().game_ply,
         );
 
-        if limits.depth > 0 {
-            let result = self.search(limits.depth);
-            if let Some((mv, _score)) = result {
-                // Probe TT for ponder move
-                self.position.do_move(mv);
-                let ponder = self
-                    .eval
-                    .transposition_table
-                    .probe(self.position.zobrist)
-                    .map(|entry| entry.best_move)
-                    .filter(|m| *m != Move::none());
-                self.position.undo_move(mv);
-
-                if let Some(ponder_mv) = ponder {
-                    println!("bestmove {:?} ponder {:?}", mv, ponder_mv);
-                } else {
-                    println!("bestmove {:?}", mv);
-                }
-            } else {
-                println!("bestmove 0000");
-            }
-        } else {
-            let score = self.evaluate_position();
-            println!("info depth 0 score cp {}", score);
-        }
+        self.search(limits.depth).map(|(mv, _score)| mv)
     }
 
     fn evaluate_position(&self) -> i16 {
@@ -694,7 +701,7 @@ impl Search {
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             if !is_pv
                 && ply > 0
-                && depth >= 10
+                && depth >= 8
                 && se_time_ok
                 && excluded_move == Move::none()
                 && entry.depth >= depth - 3
