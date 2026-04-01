@@ -1179,8 +1179,8 @@ impl Search {
         );
 
         // Update correction history: learn from the difference between raw static eval and search score.
-        // Update at all non-check, non-mate nodes (including PV) for more learning points.
-        if !in_check && best_score.abs() < VALUE_MATE - 100 {
+        // Only update at non-PV, non-check nodes with non-mate scores for reliability.
+        if !is_pv && !in_check && best_score.abs() < VALUE_MATE - 100 {
             self.update_correction(raw_static_eval, best_score, search_depth);
         }
 
