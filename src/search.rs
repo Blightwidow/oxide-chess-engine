@@ -60,7 +60,7 @@ const SEE_VALUES: [i16; 7] = [0, 100, 300, 300, 500, 900, 20000];
 /// Number of entries in the correction history table (per side)
 const CORRECTION_HISTORY_SIZE: usize = 16384;
 /// Maximum absolute correction value (centipawns * CORRECTION_GRAIN)
-const CORRECTION_MAX: i32 = 256 * 64;
+const CORRECTION_MAX: i32 = 256 * 32;
 /// Granularity for correction history values (fixed-point scaling)
 const CORRECTION_GRAIN: i32 = 256;
 
