@@ -977,7 +977,7 @@ impl Search {
                 && !in_check
                 && is_capture
                 && moves_searched > 0
-                && search_depth <= 3
+                && search_depth <= 4
                 && see(&self.position, mv) < 0
             {
                 continue;
