@@ -768,7 +768,7 @@ impl Search {
                 & !self.position.by_type_bb[us][PieceType::PAWN]
                 & !self.position.by_type_bb[us][PieceType::KING];
             if non_pawn_material != 0 {
-                let r = 3 + (search_depth as usize / 4); // adaptive reduction
+                let r = 3 + (search_depth as usize / 4) + (!improving as usize); // adaptive reduction
                 let reduced_depth = search_depth.saturating_sub(r as u8);
 
                 self.do_null_move_nnue();
