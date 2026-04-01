@@ -762,7 +762,7 @@ impl Search {
         // Skip our turn and search with reduced depth. If opponent can't beat beta
         // even with a free move, the position is likely too good to need full search.
         // Disabled in check, at shallow depth, and in zugzwang-prone positions (no pieces).
-        if allow_null && !in_check && search_depth >= 3 {
+        if allow_null && !in_check && search_depth >= 3 && static_eval >= beta {
             let us = self.position.side_to_move;
             let non_pawn_material = self.position.by_color_bb[us]
                 & !self.position.by_type_bb[us][PieceType::PAWN]
