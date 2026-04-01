@@ -55,6 +55,9 @@ impl Uci {
                 Uci::option(search, &mut args);
             } else if token == "bench" {
                 Uci::bench(search, &mut args);
+            } else if token == "eret" {
+                let seconds = args.next().and_then(|s| s.parse::<u64>().ok());
+                crate::eret::run_eret(search, seconds);
             } else if token == "bench_perft" {
                 Uci::bench_perft(search, &mut args);
             } else if token == "eval" {

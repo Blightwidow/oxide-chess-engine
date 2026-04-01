@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "convert"
 path = "src/bin/convert.rs"
 
+[[bin]]
+name = "preprocess"
+path = "src/bin/preprocess.rs"
+
 [features]
 default = ["cpu"]
 cpu = ["bullet/cpu"]
