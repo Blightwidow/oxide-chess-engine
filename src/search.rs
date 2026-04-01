@@ -1022,14 +1022,8 @@ impl Search {
                         r += 1;
                     }
                     // History-based LMR adjustment: reduce less for high-history moves
-                    let mut hist = self.history[mv.from_sq()][to_sq];
-                    if let Some((pp, pt)) = ch1_idx {
-                        hist += self.conthist_1ply[pp][pt][piece_type][to_sq];
-                    }
-                    if let Some((gp, gt)) = ch2_idx {
-                        hist += self.conthist_2ply[gp][gt][piece_type][to_sq];
-                    }
-                    r -= (hist / 10000).clamp(-1, 1) as i8;
+                    let hist = self.history[mv.from_sq()][to_sq];
+                    r -= (hist / 5000).clamp(-1, 1) as i8;
                     r.max(0).min((search_depth as i8) - 2) as u8
                 } else {
                     0
