@@ -1192,6 +1192,7 @@ impl Search {
     /// Quiescence search: resolve tactical sequences (captures, en passant)
     /// to avoid horizon effect. Uses stand-pat score as lower bound, then searches
     /// only tactical moves with delta pruning and SEE pruning.
+    /// When in check, searches all legal moves (no stand-pat) to correctly handle check evasions.
     fn quiescence(&mut self, mut alpha: i16, beta: i16, ply: usize) -> Option<i16> {
         if self.check_time() {
             return None;
@@ -1199,6 +1200,35 @@ impl Search {
         self.nodes_searched += 1;
         if ply > self.seldepth {
             self.seldepth = ply;
+        }
+
+        let in_check = self.position.checkers_bb(self.position.side_to_move) != 0;
+
+        if in_check {
+            // When in check, we must find an escape — stand-pat is invalid.
+            // Generate all legal moves and search them all.
+            let moves = self.movegen.legal_moves(&self.position);
+            if moves.is_empty() {
+                return Some(-VALUE_MATE + (ply as i16));
+            }
+            for index in 0..moves.len() {
+                let mv = moves[index];
+                self.do_move_nnue(mv);
+                let score = self.quiescence(-beta, -alpha, ply + 1).map(|s| -s);
+                self.undo_move_nnue(mv);
+                match score {
+                    Some(score) => {
+                        if score >= beta {
+                            return Some(beta);
+                        }
+                        if score > alpha {
+                            alpha = score;
+                        }
+                    }
+                    None => return None,
+                }
+            }
+            return Some(alpha);
         }
 
         // Stand pat: assume we can at least achieve the static eval by not capturing.
