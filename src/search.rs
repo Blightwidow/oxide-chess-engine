@@ -701,7 +701,7 @@ impl Search {
         if let Some(entry) = self.eval.transposition_table.probe(zobrist) {
             if !is_pv
                 && ply > 0
-                && depth >= 6
+                && depth >= 8
                 && se_time_ok
                 && excluded_move == Move::none()
                 && entry.depth >= depth - 3
