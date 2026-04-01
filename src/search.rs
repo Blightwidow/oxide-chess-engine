@@ -465,8 +465,8 @@ impl Search {
             // Aspiration windows
             let (mut alpha, mut beta) = if current_depth >= 4 && best_score_overall.abs() < VALUE_MATE - 100 {
                 (
-                    best_score_overall.saturating_sub(15),
-                    best_score_overall.saturating_add(15),
+                    best_score_overall.saturating_sub(25),
+                    best_score_overall.saturating_add(25),
                 )
             } else {
                 (-VALUE_INFINITE, VALUE_INFINITE)
