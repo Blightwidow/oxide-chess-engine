@@ -317,12 +317,7 @@ impl QMovePicker {
         }
     }
 
-    pub fn next(
-        &mut self,
-        position: &Position,
-        movegen: &Movegen,
-        capture_history: &[[[i32; 7]; 64]; 7],
-    ) -> Option<Move> {
+    pub fn next(&mut self, position: &Position, movegen: &Movegen) -> Option<Move> {
         loop {
             match self.stage {
                 Q_STAGE_TT_MOVE => {
@@ -337,7 +332,7 @@ impl QMovePicker {
                     }
                 }
                 Q_STAGE_GENERATE_CAPTURES => {
-                    self.generate_captures(position, movegen, capture_history);
+                    self.generate_captures(position, movegen);
                     self.stage = Q_STAGE_CAPTURES;
                 }
                 Q_STAGE_CAPTURES => {
@@ -354,12 +349,7 @@ impl QMovePicker {
         }
     }
 
-    fn generate_captures(
-        &mut self,
-        position: &Position,
-        movegen: &Movegen,
-        capture_history: &[[[i32; 7]; 64]; 7],
-    ) {
+    fn generate_captures(&mut self, position: &Position, movegen: &Movegen) {
         let raw = movegen.generate_captures(position);
         let us = position.side_to_move;
         let king_square = bits::lsb(position.by_type_bb[us][PieceType::KING]);
@@ -372,16 +362,7 @@ impl QMovePicker {
             if !is_legal_fast(*mv, us, king_square, position) {
                 continue;
             }
-            let mut score = score_capture(*mv, position);
-            let to = mv.to_sq();
-            let move_type = mv.type_of();
-            let piece_type = type_of_piece(position.board[mv.from_sq()]);
-            let victim_type = if move_type == MoveTypes::EN_PASSANT {
-                PieceType::PAWN
-            } else {
-                type_of_piece(position.board[to])
-            };
-            score += capture_history[piece_type][to][victim_type] / 32;
+            let score = score_capture(*mv, position);
             self.captures.push((*mv, score));
         }
     }
