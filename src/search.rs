@@ -127,11 +127,11 @@ pub struct Search {
 impl Search {
     /// Initialize search with precomputed LMR table.
     pub fn new(position: Position, movegen: Movegen, eval: Eval, nnue: NnueEval) -> Self {
-        // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2.2
+        // Precompute LMR reduction values: R = ln(depth) * ln(move_number) / 2
         let mut lmr_table = [[0u8; 64]; 128];
         for (depth, row) in lmr_table.iter_mut().enumerate().skip(1) {
             for (move_num, entry) in row.iter_mut().enumerate().skip(1) {
-                *entry = ((depth as f64).ln() * (move_num as f64).ln() / 2.2) as u8;
+                *entry = ((depth as f64).ln() * (move_num as f64).ln() / 2.0) as u8;
             }
         }
 
