@@ -103,6 +103,8 @@ pub struct Search {
     lmr_table: [[u8; 64]; 128],
     /// Countdown until next time check (avoids calling Instant::now() every node)
     nodes_until_check: usize,
+    /// Hard node limit for the current search (usize::MAX = unlimited)
+    nodes_limit: usize,
     /// Correction history: tracks static eval error keyed by [side][pawn_hash % SIZE].
     /// Values are stored in fixed-point (scaled by CORRECTION_GRAIN).
     correction_history: Box<[[i32; CORRECTION_HISTORY_SIZE]; 2]>,
@@ -148,6 +150,7 @@ impl Search {
             history: [[0; 64]; 64],
             lmr_table,
             nodes_until_check: CHECK_INTERVAL,
+            nodes_limit: usize::MAX,
             correction_history: Box::new([[0i32; CORRECTION_HISTORY_SIZE]; 2]),
             static_eval_stack: [0i16; MAX_PLY],
             countermoves: [[Move::none(); 64]; 64],
@@ -219,6 +222,7 @@ impl Search {
         self.ply_piece_type = [PieceType::NONE; MAX_PLY];
         self.ply_to_square = [0; MAX_PLY];
         self.nodes_until_check = CHECK_INTERVAL;
+        self.nodes_limit = limits.nodes;
 
         // Increment TT generation for age-based replacement
         self.eval.transposition_table.new_generation();
@@ -414,9 +418,12 @@ impl Search {
 
     // ─── Time Management ──────────────────────────────────────────────────────
 
-    /// Periodically check if we've exceeded the hard time limit.
+    /// Periodically check if we've exceeded the hard time or node limit.
     /// Returns true if search should abort immediately.
     fn check_time(&mut self) -> bool {
+        if self.nodes_searched >= self.nodes_limit {
+            return true;
+        }
         self.nodes_until_check -= 1;
         if self.nodes_until_check == 0 {
             self.nodes_until_check = CHECK_INTERVAL;
@@ -789,7 +796,7 @@ impl Search {
         // If static eval is far above beta (by margin*depth cp), assume no move will
         // drop the score below beta. Safe to prune the whole subtree.
         if !is_pv && !in_check && search_depth <= 7 && static_eval.abs() < VALUE_MATE - 100 {
-            let rfp_margin = (if improving { 80 } else { 65 }) * (search_depth as i16);
+            let rfp_margin = (if improving { 75 } else { 60 }) * (search_depth as i16);
             if static_eval - rfp_margin >= beta {
                 return Some(static_eval);
             }
