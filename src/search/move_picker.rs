@@ -165,7 +165,7 @@ impl MovePicker {
                 } else {
                     type_of_piece(position.board[to])
                 };
-                score += capture_history[piece_type][to][victim_type] / 16;
+                score += capture_history[piece_type][to][victim_type] / 32;
 
                 self.captures.push((*mv, score));
             } else {
