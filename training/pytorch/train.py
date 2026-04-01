@@ -171,10 +171,16 @@ def train(
             superbatch_loss += loss.item()
             batch_count += 1
 
-            # Log every 32 batches
+            # Log and print progress every 32 batches
             if batch_count % 32 == 0:
                 log_writer.writerow([superbatch, batch_count, f"{loss.item():.6f}"])
                 log_file.flush()
+                print(
+                    f"\r  [{superbatch}/{end_superbatch}] batch {batch_count}/{BATCHES_PER_SUPERBATCH} "
+                    f"loss={loss.item():.5f}",
+                    end="",
+                    flush=True,
+                )
 
             if batch_count >= BATCHES_PER_SUPERBATCH:
                 break

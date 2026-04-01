@@ -53,6 +53,8 @@ def needs_mirror(king_square: int) -> bool:
 def extract_features_batch(entries: np.ndarray) -> dict:
     """Extract NNUE features from a batch of ChessBoard entries.
 
+    Vectorized: iterates 64 squares (not batch_size * ~20 pieces) using numpy.
+
     Args:
         entries: numpy array of raw bytes, shape (batch_size, 32)
 
@@ -63,74 +65,87 @@ def extract_features_batch(entries: np.ndarray) -> dict:
 
     # Parse fields from the 32-byte structs
     occupancy = np.frombuffer(entries[:, :8].tobytes(), dtype=np.uint64).copy()
-    packed_pieces = entries[:, 8:24]  # [batch, 16] bytes
+    packed_pieces = entries[:, 8:24]  # (batch_size, 16)
     scores = np.frombuffer(entries[:, 24:26].tobytes(), dtype=np.int16).copy()
-    results = entries[:, 26].astype(np.float32) / 2.0  # 0.0, 0.5, 1.0
+    results = entries[:, 26].astype(np.float32) / 2.0
     our_king_squares = entries[:, 27].astype(np.int32)
     opp_king_squares = entries[:, 28].astype(np.int32)
 
-    # Compute targets: blend of WDL result and sigmoid(score)
     sigmoid_scores = 1.0 / (1.0 + np.exp(-scores.astype(np.float32) / EVAL_SCALE))
     targets = WDL_BLEND * results + (1.0 - WDL_BLEND) * sigmoid_scores
 
-    # Pre-allocate feature index arrays (max 32 pieces per position, 2 perspectives)
-    all_stm_indices = []
-    all_ntm_indices = []
+    # Per-position king bucket and mirror (vectorized)
+    stm_needs_mirror = (our_king_squares % 8) > 3
+    ntm_needs_mirror = (opp_king_squares % 8) > 3
+    stm_mirror = np.where(stm_needs_mirror, np.int64(7), np.int64(0))
+    ntm_mirror = np.where(ntm_needs_mirror, np.int64(7), np.int64(0))
+    stm_ksq = np.where(stm_needs_mirror, our_king_squares ^ 7, our_king_squares).astype(np.int64)
+    ntm_ksq = np.where(ntm_needs_mirror, opp_king_squares ^ 7, opp_king_squares).astype(np.int64)
+    stm_bucket_offset = (stm_ksq // 8) * 768
+    ntm_bucket_offset = (ntm_ksq // 8) * 768
+
+    # Unpack all 32 piece slots per position: shape (batch_size, 32)
+    # Piece slot j: low nibble of byte j//2 (j even) or high nibble (j odd)
+    piece_slots = np.empty((batch_size, 32), dtype=np.int64)
+    piece_slots[:, 0::2] = packed_pieces & 0x0F
+    piece_slots[:, 1::2] = (packed_pieces >> 4) & 0x0F
+    color_slots = (piece_slots >> 3) & 1  # 0 = STM piece, 1 = opponent
+    type_slots = piece_slots & 7
+
+    # Piece count per position = popcount(occupancy), used for offset computation
+    occ_bytes = occupancy.view(np.uint8).reshape(batch_size, 8)
+    piece_counts = np.unpackbits(occ_bytes, axis=1, bitorder="little").sum(axis=1).astype(np.int64)
+
     stm_offsets = np.zeros(batch_size, dtype=np.int64)
     ntm_offsets = np.zeros(batch_size, dtype=np.int64)
+    stm_offsets[1:] = np.cumsum(piece_counts[:-1])
+    ntm_offsets[1:] = np.cumsum(piece_counts[:-1])
 
-    current_stm_offset = 0
-    current_ntm_offset = 0
+    # Iterate over 64 squares (not batch_size * ~20 pieces).
+    # For each square, process only the positions that have a piece there.
+    # piece_rank[i] = how many pieces at squares < current sq in position i (= piece slot index).
+    piece_rank = np.zeros(batch_size, dtype=np.int32)
+    stm_chunks: list[np.ndarray] = []
+    ntm_chunks: list[np.ndarray] = []
+    pos_id_chunks: list[np.ndarray] = []
 
-    for position_index in range(batch_size):
-        occupancy_bits = int(occupancy[position_index])
-        our_king_sq = int(our_king_squares[position_index])
-        opp_king_sq = int(opp_king_squares[position_index])
+    for square in range(64):
+        present = ((occupancy >> np.uint64(square)) & np.uint64(1)).astype(bool)
+        if not np.any(present):
+            continue
 
-        # Compute bucket and mirror for each perspective
-        stm_mirror = 7 if needs_mirror(our_king_sq) else 0
-        ntm_mirror = 7 if needs_mirror(opp_king_sq) else 0
-        stm_bucket_offset = 768 * king_bucket(our_king_sq)
-        ntm_bucket_offset = 768 * king_bucket(opp_king_sq)
+        pos_idx = np.where(present)[0]
+        ranks = piece_rank[pos_idx]
+        colors = color_slots[pos_idx, ranks]
+        types = type_slots[pos_idx, ranks]
 
-        stm_offsets[position_index] = current_stm_offset
-        ntm_offsets[position_index] = current_ntm_offset
+        stm_base = np.where(colors == 0, np.int64(0), np.int64(384)) + types * 64 + square
+        ntm_base = np.where(colors == 0, np.int64(384), np.int64(0)) + types * 64 + (square ^ 56)
 
-        piece_bytes = packed_pieces[position_index]
-        piece_index = 0
-        occ = occupancy_bits
+        stm_chunks.append(stm_bucket_offset[pos_idx] + (stm_base ^ stm_mirror[pos_idx]))
+        ntm_chunks.append(ntm_bucket_offset[pos_idx] + (ntm_base ^ ntm_mirror[pos_idx]))
+        pos_id_chunks.append(pos_idx)
 
-        while occ:
-            square = (occ & -occ).bit_length() - 1  # trailing zeros
-            occ &= occ - 1  # clear lowest set bit
+        piece_rank[pos_idx] += 1
 
-            # Unpack piece: 4 bits per piece, 2 pieces per byte
-            byte_index = piece_index // 2
-            nibble = piece_index & 1
-            piece = (int(piece_bytes[byte_index]) >> (4 * nibble)) & 0xF
+    # Concatenate features (currently grouped by square) and sort by position
+    # so each position's features are contiguous, matching stm_offsets.
+    total_features = int(piece_counts.sum())
+    stm_indices = np.empty(total_features, dtype=np.int64)
+    ntm_indices = np.empty(total_features, dtype=np.int64)
 
-            color = (piece >> 3) & 1  # 0 = our piece, 1 = opponent piece
-            piece_type = piece & 7     # 0=pawn, 1=knight, ..., 5=king
-
-            # Chess768 base features (STM-relative, matching bullet's Chess768)
-            stm_base = [0, 384][color] + 64 * piece_type + square
-            ntm_base = [384, 0][color] + 64 * piece_type + (square ^ 56)
-
-            # Apply horizontal mirroring and bucket offset
-            stm_feature = stm_bucket_offset + (stm_base ^ stm_mirror)
-            ntm_feature = ntm_bucket_offset + (ntm_base ^ ntm_mirror)
-
-            all_stm_indices.append(stm_feature)
-            all_ntm_indices.append(ntm_feature)
-
-            piece_index += 1
-            current_stm_offset += 1
-            current_ntm_offset += 1
+    if stm_chunks:
+        stm_cat = np.concatenate(stm_chunks)
+        ntm_cat = np.concatenate(ntm_chunks)
+        pos_ids = np.concatenate(pos_id_chunks)
+        order = np.argsort(pos_ids, kind="stable")
+        stm_indices[:] = stm_cat[order]
+        ntm_indices[:] = ntm_cat[order]
 
     return {
-        "stm_indices": np.array(all_stm_indices, dtype=np.int64),
+        "stm_indices": stm_indices,
         "stm_offsets": stm_offsets,
-        "ntm_indices": np.array(all_ntm_indices, dtype=np.int64),
+        "ntm_indices": ntm_indices,
         "ntm_offsets": ntm_offsets,
         "targets": targets.astype(np.float32),
     }
@@ -162,25 +177,34 @@ class PreprocessedDataset(IterableDataset):
         # Memory-map the file
         data = np.memmap(self.data_path, dtype=np.uint8, mode="r").reshape(-1, ENTRY_SIZE)
 
-        # Create index array for shuffling
-        indices = np.arange(self.num_positions)
+        # Block-level shuffle: divide into blocks of 1M positions, shuffle block order,
+        # then shuffle within each block. Avoids allocating a ~19GB index array.
+        block_size = 1_000_000
+        num_blocks = self.num_positions // block_size
+        block_order = np.arange(num_blocks)
         if self.shuffle:
-            np.random.shuffle(indices)
+            np.random.shuffle(block_order)
 
-        # Yield batches
-        for start in range(0, self.num_positions - self.batch_size + 1, self.batch_size):
-            batch_indices = indices[start : start + self.batch_size]
-            batch_entries = data[batch_indices]
+        for block_index in block_order:
+            block_start = block_index * block_size
+            block_end = min(block_start + block_size, self.num_positions)
+            within_block = np.arange(block_start, block_end)
+            if self.shuffle:
+                np.random.shuffle(within_block)
 
-            features = extract_features_batch(batch_entries)
+            for start in range(0, len(within_block) - self.batch_size + 1, self.batch_size):
+                batch_indices = within_block[start : start + self.batch_size]
+                batch_entries = data[batch_indices]
 
-            yield (
-                torch.from_numpy(features["stm_indices"]),
-                torch.from_numpy(features["stm_offsets"]),
-                torch.from_numpy(features["ntm_indices"]),
-                torch.from_numpy(features["ntm_offsets"]),
-                torch.from_numpy(features["targets"]).unsqueeze(1),
-            )
+                features = extract_features_batch(batch_entries)
+
+                yield (
+                    torch.from_numpy(features["stm_indices"]),
+                    torch.from_numpy(features["stm_offsets"]),
+                    torch.from_numpy(features["ntm_indices"]),
+                    torch.from_numpy(features["ntm_offsets"]),
+                    torch.from_numpy(features["targets"]).unsqueeze(1),
+                )
 
 
 def create_dataloader(
