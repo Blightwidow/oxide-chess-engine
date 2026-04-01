@@ -1,6 +1,6 @@
 # UCI Protocol
 
-Oxide implements the [Universal Chess Interface](https://en.wikipedia.org/wiki/Universal_Chess_Interface) protocol. It does not include a GUI — use a UCI-compatible interface such as [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
+Oxid' implements the [Universal Chess Interface](https://en.wikipedia.org/wiki/Universal_Chess_Interface) protocol. It does not include a GUI — use a UCI-compatible interface such as [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
 
 ## Supported Commands
 

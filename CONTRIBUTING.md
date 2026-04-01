@@ -40,8 +40,8 @@ cargo build -r --target-dir=base   # Build baseline
 # Make changes...
 cargo build -r                     # Build new version
 ./bin/fastchess \
-    -engine cmd=./target/release/oxide name="vX.X.X" \
-    -engine cmd=./base/release/oxide name="vY.Y.Y" \
+    -engine cmd=./target/release/oxid name="vX.X.X" \
+    -engine cmd=./base/release/oxid name="vY.Y.Y" \
     -pgnout file="./games/vX.X.X-vY.Y.Y.pgn" \
     -openings file=./data/openings.pgn format=pgn order=random \
     -each tc=8+0.08 \
@@ -55,8 +55,8 @@ To SPRT a candidate NNUE net against the current one, use the `EvalFile` UCI opt
 
 ```bash
 ./bin/fastchess \
-    -engine cmd=./target/release/oxide name=candidate option.EvalFile=nets/nn-abc123def456.nnue \
-    -engine cmd=./target/release/oxide name=baseline \
+    -engine cmd=./target/release/oxid name=candidate option.EvalFile=nets/nn-abc123def456.nnue \
+    -engine cmd=./target/release/oxid name=baseline \
     -each tc=8+0.08 \
     -rounds 5000 -repeat -concurrency 8 -recover \
     -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05

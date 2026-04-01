@@ -1,4 +1,4 @@
-# Oxide Chess Bot
+# Oxid' Chess Bot
 
 UCI-compatible chess engine written in Rust.
 
@@ -20,8 +20,8 @@ When changing search or evaluation code, compare nodes/second before and after:
 cargo build -r --target-dir=base   # Build baseline before changes
 # Make changes...
 cargo build -r                     # Build new version
-printf "bench 16 1 11 5\nquit\n" | ./base/release/oxide 2>&1    # Baseline (5 positions, depth 11)
-printf "bench 16 1 11 5\nquit\n" | ./target/release/oxide 2>&1  # After changes
+printf "bench 16 1 11 5\nquit\n" | ./base/release/oxid 2>&1    # Baseline (5 positions, depth 11)
+printf "bench 16 1 11 5\nquit\n" | ./target/release/oxid 2>&1  # After changes
 ```
 
 Compare the `Nodes/second` output. Usage: `bench [hash_mb] [threads] [depth] [count]`.
@@ -32,7 +32,7 @@ Compare the `Nodes/second` output. Usage: `bench [hash_mb] [threads] [depth] [co
 cargo build -r --target-dir=base   # Build baseline
 # Make changes...
 cargo build -r                     # Build new version
-./bin/fastchess -engine cmd=./target/release/chessbot name=oxide \
+./bin/fastchess -engine cmd=./target/release/chessbot name=oxid \
   -engine cmd=./base/release/chessbot name=engine_BASE \
   -each tc=8+0.08 -rounds 15000 -repeat -concurrency 6 -recover \
   -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05

@@ -1,8 +1,10 @@
-# Oxide Chess Engine
+# Oxid' Chess Engine
 
 ![Logo illustration](./docs/logo.png)
 
 A 2625 Elo UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
+
+> **Note:** Previously named *Oxide*. Renamed to *Oxid'* after discovering another chess engine already uses that name.
 
 ## Usage
 
@@ -16,7 +18,7 @@ Or build and run the executable:
 
 ```bash
 cargo build -r
-./target/release/oxide <command>
+./target/release/oxid <command>
 ```
 
 The binary is fully self-contained — the NNUE network is embedded at compile time, no external files needed.

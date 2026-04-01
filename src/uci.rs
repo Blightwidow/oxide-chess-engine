@@ -31,7 +31,7 @@ impl Uci {
             buffer.clear();
 
             if token == "uci" {
-                println!("id name Oxide");
+                println!("id name Oxid'");
                 println!("id author Theo Dammaretz");
                 println!("option name Hash type spin default 16 min 1 max 512");
                 println!("option name EvalFile type string default <embedded>");
@@ -326,7 +326,7 @@ impl Uci {
 
     fn help() {
         println!();
-        println!("Oxide is a simple chess engine I built as a learning project.");
+        println!("Oxid' is a simple chess engine I built as a learning project.");
         println!("It is UCI compatible and can be used with any UCI compatible GUI.");
         println!("While not very strong yet but I am working on it and hoping to achieve a rating of 2000+.");
         println!();

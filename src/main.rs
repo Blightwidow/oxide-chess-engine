@@ -23,7 +23,7 @@ pub const DEFAULT_EVAL_FILE: &str = "nn-8808c22a8203.nnue";
 pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-8808c22a8203.nnue"));
 
 fn main() {
-    println!("Oxide v1.0.0 by Theo Dammaretz");
+    println!("Oxid' v1.3.0 by Theo Dammaretz");
 
     let bitboards = Rc::new(Bitboards::new());
     let hasher = Rc::new(Hasher::new());
