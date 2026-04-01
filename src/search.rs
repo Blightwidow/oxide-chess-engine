@@ -562,7 +562,9 @@ impl Search {
     /// Look up the correction for the current position's pawn structure.
     /// Returns a centipawn adjustment to add to the static eval.
     fn correction(&self) -> i32 {
-        0
+        let side = self.position.side_to_move;
+        let idx = (self.position.pawn_hash as usize) % CORRECTION_HISTORY_SIZE;
+        self.correction_history[side][idx] / CORRECTION_GRAIN
     }
 
     /// Update the correction history entry with exponential moving average.
