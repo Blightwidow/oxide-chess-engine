@@ -289,6 +289,7 @@ fn eret_score_to_elo(score: f64) -> f64 {
 
 pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
     let movetime = (seconds_per_position.unwrap_or(1) * 1000) as usize;
+    search.eval.resize_transposition_table(1024);
     let positions: Vec<ParsedEpd> = EPD_LINES.iter().filter_map(|line| parse_epd(line)).collect();
 
     let mut total_nodes: usize = 0;
