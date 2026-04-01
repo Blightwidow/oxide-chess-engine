@@ -109,3 +109,4 @@ Current search features (see `docs/search.md` for details):
 - Run `cargo fmt` after changes to format code
 - Run `cargo clippy` before committing
 - Sub-module definitions go in `defs.rs` files, not inline
+- Revert commits with `GIT_EDITOR=true git revert <ref> --no-verify` (avoids interactive editor prompt)
