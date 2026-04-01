@@ -958,8 +958,12 @@ impl Search {
 
             // Futility Pruning: at low depth, skip quiet moves when static eval + margin
             // can't reach alpha (the move won't improve the situation enough).
-            if !is_pv && !in_check && is_quiet && !is_killer && moves_searched > 0 && search_depth <= 2 {
-                let futility_margin = if search_depth == 1 { 175_i16 } else { 350_i16 };
+            if !is_pv && !in_check && is_quiet && !is_killer && moves_searched > 0 && search_depth <= 3 {
+                let futility_margin = match search_depth {
+                    1 => 175_i16,
+                    2 => 350_i16,
+                    _ => 550_i16,
+                };
                 if static_eval + futility_margin <= alpha {
                     picker.skip_quiets = true;
                     continue;
