@@ -269,15 +269,7 @@ fn move_matches(
 /// Fitted from: Stockfish 9 (3425, 77), Komodo 12 (3376, 75), Booot 6.3 (3240, 57),
 /// BlackMamba 2.0 (3091, 34), Alfil 13.1 (2748, 17), Clueless 1.4 (1840, 11).
 fn eret_score_to_elo(score: f64) -> f64 {
-    const COEFFICIENTS: [f64; 7] = [
-        -3067.0,
-        737.0,
-        -33.6,
-        0.731,
-        -7.62e-3,
-        3.13e-5,
-        -7.39e-9,
-    ];
+    const COEFFICIENTS: [f64; 7] = [-3067.0, 737.0, -33.6, 0.731, -7.62e-3, 3.13e-5, -7.39e-9];
     let mut result = 0.0;
     let mut power = 1.0;
     for &coefficient in &COEFFICIENTS {
@@ -287,8 +279,12 @@ fn eret_score_to_elo(score: f64) -> f64 {
     result
 }
 
-pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
-    let movetime = (seconds_per_position.unwrap_or(1) * 1000) as usize;
+pub enum EretLimit {
+    Seconds(u64),
+    Nodes(u64),
+}
+
+pub fn run_eret(search: &mut Search, limit: EretLimit) {
     let positions: Vec<ParsedEpd> = EPD_LINES.iter().filter_map(|line| parse_epd(line)).collect();
 
     let mut total_nodes: usize = 0;
@@ -302,7 +298,10 @@ pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
         search.nnue.refresh(&search.position);
 
         let mut limits = SearchLimits::default();
-        limits.movetime = movetime;
+        match limit {
+            EretLimit::Seconds(seconds) => limits.movetime = (seconds * 1000) as usize,
+            EretLimit::Nodes(nodes) => limits.nodes = nodes as usize,
+        };
 
         let result = search.run_and_return(limits);
         let nodes = search.nodes_searched;
@@ -360,7 +359,7 @@ pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
     // Print estimated Elo when using the standard 15s time control.
     // Polynomial regression fitted from reference engines (Stockfish 9, Komodo 12,
     // Booot 6.3, BlackMamba 2.0, Alfil 13.1, Clueless 1.4).
-    if seconds_per_position == Some(15) {
+    if matches!(limit, EretLimit::Seconds(15)) {
         let estimated_elo = eret_score_to_elo(solved as f64);
         println!("Estimated Elo : {:.0}", estimated_elo);
     }
