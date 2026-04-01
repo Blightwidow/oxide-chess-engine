@@ -737,7 +737,7 @@ impl Search {
 
         // Internal Iterative Reductions (IIR): reduce depth when no TT move guides ordering.
         // The TT gets populated for future iterations anyway.
-        let search_depth = if tt_move == Move::none() && search_depth >= 4 && !in_check {
+        let search_depth = if tt_move == Move::none() && search_depth >= 3 && !in_check {
             search_depth - 1
         } else {
             search_depth
