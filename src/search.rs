@@ -814,7 +814,7 @@ impl Search {
         // If a capture exists that quickly exceeds beta by a large margin at reduced
         // depth, prune the whole node. Avoids searching positions that are clearly
         // too good (false fail-lows won't be missed since the bound is wide).
-        if !is_pv && !in_check && search_depth >= 6 && beta.abs() < VALUE_MATE - 100 && excluded_move == Move::none() {
+        if !is_pv && !in_check && search_depth >= 5 && beta.abs() < VALUE_MATE - 100 && excluded_move == Move::none() {
             let probcut_beta = beta.saturating_add(200);
             let probcut_depth = search_depth.saturating_sub(4);
             let captures = self.movegen.generate_captures(&self.position);
