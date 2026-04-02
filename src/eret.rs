@@ -266,10 +266,8 @@ fn move_matches(
 }
 
 /// Estimate Elo from ERET 15s score using a degree-6 polynomial regression.
-/// Fitted from: Stockfish 9 (3425, 77), Komodo 12 (3376, 75), Booot 6.3 (3240, 57),
-/// BlackMamba 2.0 (3091, 34), Alfil 13.1 (2748, 17), Clueless 1.4 (1840, 11).
 fn eret_score_to_elo(score: f64) -> f64 {
-    const COEFFICIENTS: [f64; 7] = [-3067.0, 737.0, -33.6, 0.731, -7.62e-3, 3.13e-5, -7.39e-9];
+    const COEFFICIENTS: [f64; 7] = [-895.0, 401.0, -17.5, 0.39, -4.39e-3, 2.21e-5, -3.1e-8];
     let mut result = 0.0;
     let mut power = 1.0;
     for &coefficient in &COEFFICIENTS {
@@ -286,6 +284,7 @@ pub enum EretLimit {
 
 pub fn run_eret(search: &mut Search, limit: EretLimit) {
     let positions: Vec<ParsedEpd> = EPD_LINES.iter().filter_map(|line| parse_epd(line)).collect();
+    search.eval.resize_transposition_table(1024);
 
     let mut total_nodes: usize = 0;
     let mut solved = 0;

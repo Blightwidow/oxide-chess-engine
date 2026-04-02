@@ -120,7 +120,7 @@ fn main() {
     if !has_validation {
         // No validation data — run normally
         let schedule = TrainingSchedule {
-            net_id: "oxide".to_string(),
+            net_id: "oxid".to_string(),
             eval_scale: 400.0,
             steps: TrainingSteps {
                 batch_size,
@@ -152,7 +152,7 @@ fn main() {
         let segment_end = (segment_start + save_rate - 1).min(end_superbatch);
 
         let schedule = TrainingSchedule {
-            net_id: "oxide".to_string(),
+            net_id: "oxid".to_string(),
             eval_scale: scale,
             steps: TrainingSteps {
                 batch_size,

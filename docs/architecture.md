@@ -1,6 +1,6 @@
 # Architecture
 
-Oxide is a single-threaded UCI chess engine written in Rust. This document describes how the engine is structured and how its components interact.
+Oxid' is a single-threaded UCI chess engine written in Rust. This document describes how the engine is structured and how its components interact.
 
 ## Entry Point
 

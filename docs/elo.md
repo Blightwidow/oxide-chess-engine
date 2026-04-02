@@ -1,14 +1,14 @@
 # Elo Estimation
 
-Oxide doesn't have an official CCRL rating. To estimate its strength, we run SPRT matches against versions of [Stash](https://github.com/mhouppin/stash-bot), a well-established engine with CCRL-rated releases.
+Oxid' doesn't have an official CCRL rating. To estimate its strength, we run SPRT matches against versions of [Stash](https://github.com/mhouppin/stash-bot), a well-established engine with CCRL-rated releases.
 
 ## Method
 
-1. Pick a Stash version close to Oxide's expected strength.
+1. Pick a Stash version close to Oxid''s expected strength.
 2. Run an SPRT test using [fastchess](https://github.com/Disservin/fastchess):
    ```bash
    ./bin/fastchess \
-       -engine cmd=./target/release/chessbot name=oxide \
+       -engine cmd=./target/release/chessbot name=oxid \
        -engine cmd=./stash/stash-vXX name=stash-vXX \
        -openings file=8moves_v3.pgn format=pgn order=random \
        -each tc=8+0.08 \
@@ -17,11 +17,11 @@ Oxide doesn't have an official CCRL rating. To estimate its strength, we run SPR
        -recover \
        -sprt elo0=0 elo1=10 alpha=0.05 beta=0.1
    ```
-3. If Oxide wins the SPRT (H1 accepted), it is likely stronger than that Stash version. Test upward. If it loses (H0 accepted), test downward. The Elo estimate is bracketed by the highest version Oxide beats and the lowest it loses to.
+3. If Oxid' wins the SPRT (H1 accepted), it is likely stronger than that Stash version. Test upward. If it loses (H0 accepted), test downward. The Elo estimate is bracketed by the highest version Oxid' beats and the lowest it loses to.
 
 ## Elo Table
 
-| Oxide Version | Estimated Elo | Notes |
+| Oxid' Version | Estimated Elo | Notes |
 |---------------|---------------|-------|
 | v1.1.1 | ~2600 | +46 vs Stash v20 (2509), -31 vs Stash v21 (2714) |
 | v1.1.0 | ~2401 | Bucketed NNUE, ~+1 Elo over v1.0.1 |
@@ -37,7 +37,7 @@ The [Eigenmann Rapid Engine Test](https://www.chessprogramming.org/Eigenmann_Rap
 
 ```bash
 cargo build -r
-printf "eret 15\nquit\n" | ./target/release/oxide
+printf "eret 15\nquit\n" | ./target/release/oxid
 ```
 
 The argument is time per position in seconds. A full run at 15s takes ~28 minutes. When using 15s, the engine prints an estimated Elo based on a polynomial regression fitted to the reference data.
@@ -53,7 +53,7 @@ The argument is time per position in seconds. A full run at 15s takes ~28 minute
 | Alfil 13.1 | 2748 | 17/111 |
 | Clueless 1.4 | 1840 | 11/111 |
 
-Use this table to interpolate Oxide's approximate Elo from its ERET score. The relationship is roughly linear in the 2000–3400 range.
+Use this table to interpolate Oxid''s approximate Elo from its ERET score. The relationship is roughly linear in the 2000–3400 range.
 
 ## Stash Reference Ratings
 

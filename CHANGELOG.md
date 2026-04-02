@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Oxide are documented in this file.
+All notable changes to Oxid' are documented in this file.
 
 ## v1.2.0
 

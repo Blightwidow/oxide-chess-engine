@@ -84,13 +84,13 @@ uv run python train.py ../data/preprocessed.bin --validation ../data/validation/
 Options:
 - `--superbatches N` — total superbatches (default 60)
 - `--save-rate N` — checkpoint interval (default 10)
-- `--resume checkpoints/oxide-30` — resume from checkpoint
+- `--resume checkpoints/oxid-30` — resume from checkpoint
 
 ### Step 3: Export
 
 ```bash
 cd training/pytorch
-uv run python export.py checkpoints/oxide-60/model.pt ../../nets/default.nnue
+uv run python export.py checkpoints/oxid-60/model.pt ../../nets/default.nnue
 ```
 
 ## SPRT Testing

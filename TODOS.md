@@ -1,4 +1,4 @@
-# Oxide Chess Engine — TODO / Roadmap (2625 → 2850+ Elo)
+# Oxid' Chess Engine — TODO / Roadmap (2625 → 2850+ Elo)
 
 ## Phase A — Low-hanging fruit (~+50 Elo)
 
