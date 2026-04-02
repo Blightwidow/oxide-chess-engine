@@ -277,10 +277,14 @@ fn eret_score_to_elo(score: f64) -> f64 {
     result
 }
 
-pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
-    let movetime = (seconds_per_position.unwrap_or(1) * 1000) as usize;
-    search.eval.resize_transposition_table(1024);
+pub enum EretLimit {
+    Seconds(u64),
+    Nodes(u64),
+}
+
+pub fn run_eret(search: &mut Search, limit: EretLimit) {
     let positions: Vec<ParsedEpd> = EPD_LINES.iter().filter_map(|line| parse_epd(line)).collect();
+    search.eval.resize_transposition_table(1024);
 
     let mut total_nodes: usize = 0;
     let mut solved = 0;
@@ -293,7 +297,10 @@ pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
         search.nnue.refresh(&search.position);
 
         let mut limits = SearchLimits::default();
-        limits.movetime = movetime;
+        match limit {
+            EretLimit::Seconds(seconds) => limits.movetime = (seconds * 1000) as usize,
+            EretLimit::Nodes(nodes) => limits.nodes = nodes as usize,
+        };
 
         let result = search.run_and_return(limits);
         let nodes = search.nodes_searched;
@@ -351,7 +358,7 @@ pub fn run_eret(search: &mut Search, seconds_per_position: Option<u64>) {
     // Print estimated Elo when using the standard 15s time control.
     // Polynomial regression fitted from reference engines (Stockfish 9, Komodo 12,
     // Booot 6.3, BlackMamba 2.0, Alfil 13.1, Clueless 1.4).
-    if seconds_per_position == Some(15) {
+    if matches!(limit, EretLimit::Seconds(15)) {
         let estimated_elo = eret_score_to_elo(solved as f64);
         println!("Estimated Elo : {:.0}", estimated_elo);
     }

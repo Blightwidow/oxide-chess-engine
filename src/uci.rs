@@ -56,8 +56,15 @@ impl Uci {
             } else if token == "bench" {
                 Uci::bench(search, &mut args);
             } else if token == "eret" {
-                let seconds = args.next().and_then(|s| s.parse::<u64>().ok());
-                crate::eret::run_eret(search, seconds);
+                // `eret nodes <N>` for deterministic runs, `eret [seconds]` for time-based
+                let mode = args.next();
+                let value = args.next().and_then(|s| s.parse::<u64>().ok());
+                let limit = match mode {
+                    Some("nodes") => crate::eret::EretLimit::Nodes(value.unwrap_or(1_000_000)),
+                    Some(s) => crate::eret::EretLimit::Seconds(s.parse::<u64>().unwrap_or(1)),
+                    None => crate::eret::EretLimit::Seconds(1),
+                };
+                crate::eret::run_eret(search, limit);
             } else if token == "bench_perft" {
                 Uci::bench_perft(search, &mut args);
             } else if token == "eval" {
