@@ -1,6 +1,7 @@
 pub mod defs;
 pub mod features;
 pub mod network;
+pub mod simd;
 
 use crate::misc::bits;
 use crate::{defs::*, position::Position};
@@ -35,11 +36,11 @@ impl NnueEval {
     pub fn zero() -> Self {
         use self::network::Network;
         let network = Network {
-            ft_weights: vec![[0i16; HIDDEN_SIZE]; BUCKET_FEATURE_SIZE]
+            ft_weights: vec![Accumulator::zeroed(); BUCKET_FEATURE_SIZE]
                 .into_boxed_slice()
                 .try_into()
                 .unwrap(),
-            ft_biases: [0i16; HIDDEN_SIZE],
+            ft_biases: Accumulator::zeroed(),
             l1_weights: [[0i16; HIDDEN_SIZE * 2]; L1_SIZE],
             l1_biases: [0i16; L1_SIZE],
             l2_weights: [0i16; L1_SIZE],
@@ -77,10 +78,8 @@ impl NnueEval {
             let white_feat = feature_index(Sides::WHITE, white_king_sq, color, pt, sq);
             let black_feat = feature_index(Sides::BLACK, black_king_sq, color, pt, sq);
 
-            for i in 0..HIDDEN_SIZE {
-                white_acc[i] += self.network.ft_weights[white_feat][i];
-                black_acc[i] += self.network.ft_weights[black_feat][i];
-            }
+            simd::add_i16_256(&mut white_acc, &self.network.ft_weights[white_feat]);
+            simd::add_i16_256(&mut black_acc, &self.network.ft_weights[black_feat]);
         }
 
         self.stack.clear();
@@ -117,9 +116,7 @@ impl NnueEval {
             let pt = type_of_piece(piece);
             let color = color_of_piece(piece);
             let feat = feature_index(perspective, king_sq, color, pt, sq);
-            for (a, &w) in acc.iter_mut().zip(self.network.ft_weights[feat].iter()) {
-                *a += w;
-            }
+            simd::add_i16_256(acc, &self.network.ft_weights[feat]);
         }
     }
 
@@ -151,10 +148,8 @@ impl NnueEval {
         let white_feat = feature_index(Sides::WHITE, entry.white_king_sq, color, piece_type, square);
         let black_feat = feature_index(Sides::BLACK, entry.black_king_sq, color, piece_type, square);
 
-        for i in 0..HIDDEN_SIZE {
-            entry.white_acc[i] += self.network.ft_weights[white_feat][i];
-            entry.black_acc[i] += self.network.ft_weights[black_feat][i];
-        }
+        simd::add_i16_256(&mut entry.white_acc, &self.network.ft_weights[white_feat]);
+        simd::add_i16_256(&mut entry.black_acc, &self.network.ft_weights[black_feat]);
     }
 
     /// Subtract feature weights from both perspective accumulators on top of stack.
@@ -164,10 +159,8 @@ impl NnueEval {
         let white_feat = feature_index(Sides::WHITE, entry.white_king_sq, color, piece_type, square);
         let black_feat = feature_index(Sides::BLACK, entry.black_king_sq, color, piece_type, square);
 
-        for i in 0..HIDDEN_SIZE {
-            entry.white_acc[i] -= self.network.ft_weights[white_feat][i];
-            entry.black_acc[i] -= self.network.ft_weights[black_feat][i];
-        }
+        simd::sub_i16_256(&mut entry.white_acc, &self.network.ft_weights[white_feat]);
+        simd::sub_i16_256(&mut entry.black_acc, &self.network.ft_weights[black_feat]);
     }
 
     /// Add feature weights to one perspective's accumulator only.
@@ -184,9 +177,7 @@ impl NnueEval {
         } else {
             &mut entry.black_acc
         };
-        for (a, &w) in acc.iter_mut().zip(self.network.ft_weights[feat].iter()) {
-            *a += w;
-        }
+        simd::add_i16_256(acc, &self.network.ft_weights[feat]);
     }
 
     /// Subtract feature weights from one perspective's accumulator only.
@@ -203,9 +194,7 @@ impl NnueEval {
         } else {
             &mut entry.black_acc
         };
-        for (a, &w) in acc.iter_mut().zip(self.network.ft_weights[feat].iter()) {
-            *a -= w;
-        }
+        simd::sub_i16_256(acc, &self.network.ft_weights[feat]);
     }
 
     /// Evaluate the position from the side-to-move's perspective.
@@ -241,10 +230,8 @@ impl NnueEval {
             let color = color_of_piece(piece);
             let wf = feature_index(Sides::WHITE, white_king_sq, color, pt, sq);
             let bf = feature_index(Sides::BLACK, black_king_sq, color, pt, sq);
-            for i in 0..HIDDEN_SIZE {
-                white_acc[i] += self.network.ft_weights[wf][i];
-                black_acc[i] += self.network.ft_weights[bf][i];
-            }
+            simd::add_i16_256(&mut white_acc, &self.network.ft_weights[wf]);
+            simd::add_i16_256(&mut black_acc, &self.network.ft_weights[bf]);
         }
 
         let entry = self.stack.last().unwrap();

@@ -1,8 +1,8 @@
 use super::defs::*;
 
 pub struct Network {
-    pub ft_weights: Box<[[i16; HIDDEN_SIZE]; BUCKET_FEATURE_SIZE]>,
-    pub ft_biases: [i16; HIDDEN_SIZE],
+    pub ft_weights: Box<[Accumulator; BUCKET_FEATURE_SIZE]>,
+    pub ft_biases: Accumulator,
     /// Transposed L1 weights: stored as [L1_SIZE][HIDDEN_SIZE * 2] for cache-friendly access.
     /// File format uses [HIDDEN_SIZE * 2][L1_SIZE]; transposition happens at load time.
     pub l1_weights: [[i16; HIDDEN_SIZE * 2]; L1_SIZE],
@@ -52,18 +52,18 @@ impl Network {
             val
         };
 
-        let ft_weights: Box<[[i16; HIDDEN_SIZE]; BUCKET_FEATURE_SIZE]> = {
-            let mut v = vec![[0i16; HIDDEN_SIZE]; BUCKET_FEATURE_SIZE];
+        let ft_weights: Box<[Accumulator; BUCKET_FEATURE_SIZE]> = {
+            let mut v = vec![Accumulator::zeroed(); BUCKET_FEATURE_SIZE];
             for row in v.iter_mut() {
-                for val in row.iter_mut() {
+                for val in row.data.iter_mut() {
                     *val = read_i16(&mut offset);
                 }
             }
             v.into_boxed_slice().try_into().ok()?
         };
 
-        let mut ft_biases = [0i16; HIDDEN_SIZE];
-        for val in ft_biases.iter_mut() {
+        let mut ft_biases = Accumulator::zeroed();
+        for val in ft_biases.data.iter_mut() {
             *val = read_i16(&mut offset);
         }
 
@@ -107,20 +107,16 @@ impl Network {
     /// dot product to keep values at QA*QB scale, then divide by QB for the next SCReLU.
     /// Uses i64 accumulation to avoid overflow from squared values × 512 inputs.
     #[inline(always)]
-    pub fn forward(&self, our_acc: &[i16; HIDDEN_SIZE], their_acc: &[i16; HIDDEN_SIZE]) -> i16 {
+    pub fn forward(&self, our_acc: &Accumulator, their_acc: &Accumulator) -> i16 {
+        use super::simd;
+
         let qa = QA as i64;
         let qb = QB as i64;
 
         // Pre-compute SCReLU activations once (not 32× per neuron)
         let mut activated = [0i32; HIDDEN_SIZE * 2];
-        for (j, &val) in our_acc.iter().enumerate() {
-            let c = val.clamp(0, QA as i16) as i32;
-            activated[j] = c * c;
-        }
-        for (j, &val) in their_acc.iter().enumerate() {
-            let c = val.clamp(0, QA as i16) as i32;
-            activated[HIDDEN_SIZE + j] = c * c;
-        }
+        simd::screlu_activate(our_acc, &mut activated, 0);
+        simd::screlu_activate(their_acc, &mut activated, HIDDEN_SIZE);
 
         // L1: simple dot product per neuron (auto-vectorizable)
         let mut l1 = [0i32; L1_SIZE];
@@ -161,12 +157,12 @@ impl Network {
         data.extend_from_slice(&(L1_SIZE as u32).to_le_bytes());
 
         for row in self.ft_weights.iter() {
-            for &val in row {
+            for &val in row.data.iter() {
                 data.extend_from_slice(&val.to_le_bytes());
             }
         }
 
-        for &val in &self.ft_biases {
+        for &val in self.ft_biases.data.iter() {
             data.extend_from_slice(&val.to_le_bytes());
         }
 
@@ -197,11 +193,11 @@ mod test {
 
     pub fn zero_network() -> Network {
         Network {
-            ft_weights: vec![[0i16; HIDDEN_SIZE]; BUCKET_FEATURE_SIZE]
+            ft_weights: vec![Accumulator::zeroed(); BUCKET_FEATURE_SIZE]
                 .into_boxed_slice()
                 .try_into()
                 .unwrap(),
-            ft_biases: [0i16; HIDDEN_SIZE],
+            ft_biases: Accumulator::zeroed(),
             l1_weights: [[0i16; HIDDEN_SIZE * 2]; L1_SIZE],
             l1_biases: [0i16; L1_SIZE],
             l2_weights: [0i16; L1_SIZE],
@@ -212,8 +208,8 @@ mod test {
     #[test]
     fn zero_network_returns_zero() {
         let net = zero_network();
-        let our_acc = [0i16; HIDDEN_SIZE];
-        let their_acc = [0i16; HIDDEN_SIZE];
+        let our_acc = Accumulator::zeroed();
+        let their_acc = Accumulator::zeroed();
         assert_eq!(net.forward(&our_acc, &their_acc), 0);
     }
 
