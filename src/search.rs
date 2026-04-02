@@ -124,6 +124,8 @@ pub struct Search {
     ply_piece_type: [usize; MAX_PLY],
     /// Destination square of move made at each ply (for continuation history lookups)
     ply_to_square: [usize; MAX_PLY],
+    /// Current root search depth (for extension capping)
+    root_depth: u8,
 }
 
 impl Search {
@@ -160,6 +162,7 @@ impl Search {
             capture_history: Box::new([[[0i32; 7]; 64]; 7]),
             ply_piece_type: [PieceType::NONE; MAX_PLY],
             ply_to_square: [0; MAX_PLY],
+            root_depth: 0,
         };
         search.position.set(FEN_START_POSITION.to_string());
         search.nnue.refresh(&search.position);
@@ -452,6 +455,7 @@ impl Search {
         let mut stability_count: u32 = 0;
 
         for current_depth in 1..=max_depth {
+            self.root_depth = current_depth;
             if current_depth > 1 && self.time.should_stop_soft() {
                 break;
             }
@@ -731,13 +735,16 @@ impl Search {
 
                 match score {
                     Some(s) if s < se_beta => {
-                        extension = 1; // TT move is singular → extend
+                        // Double extend when the move is very singular
+                        extension = if s < se_beta - (depth as i16) * 2 { 2 } else { 1 };
                     }
                     Some(s) if s >= beta => {
                         return Some(s); // Multi-cut: multiple moves beat beta → prune
                     }
                     None => return None,
-                    _ => {}
+                    Some(_) => {
+                        extension = -1; // Not singular → reduce
+                    }
                 }
             }
         }
@@ -747,7 +754,13 @@ impl Search {
         if in_check {
             extension = extension.max(1);
         }
-        let search_depth = (depth as i8 + extension) as u8;
+
+        // Cap extensions: no positive extensions past 2x root depth
+        if ply as u8 > self.root_depth * 2 {
+            extension = extension.min(0);
+        }
+
+        let search_depth = (depth as i8 + extension).max(0) as u8;
 
         // Internal Iterative Reductions (IIR): reduce depth when no TT move guides ordering.
         // The TT gets populated for future iterations anyway.
