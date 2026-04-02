@@ -470,13 +470,16 @@ impl Search {
             };
 
             // Aspiration windows
-            let (mut alpha, mut beta) = if current_depth >= 4 && best_score_overall.abs() < VALUE_MATE - 100 {
+            let (mut alpha, mut beta, mut delta) = if current_depth >= 4 && best_score_overall.abs() < VALUE_MATE - 100
+            {
+                let initial_delta: i16 = 15;
                 (
-                    best_score_overall.saturating_sub(25),
-                    best_score_overall.saturating_add(25),
+                    best_score_overall.saturating_sub(initial_delta),
+                    best_score_overall.saturating_add(initial_delta),
+                    initial_delta,
                 )
             } else {
-                (-VALUE_INFINITE, VALUE_INFINITE)
+                (-VALUE_INFINITE, VALUE_INFINITE, VALUE_INFINITE)
             };
 
             loop {
@@ -519,17 +522,21 @@ impl Search {
                         break;
                     }
                     if best_score <= alpha {
-                        // Fail low - widen alpha
-                        alpha = alpha.saturating_sub(100);
-                        if alpha <= -VALUE_INFINITE + 100 {
+                        // Fail low - widen alpha exponentially
+                        delta = delta.saturating_mul(2);
+                        alpha = best_score_overall.saturating_sub(delta);
+                        if delta >= 1000 {
                             alpha = -VALUE_INFINITE;
+                            beta = VALUE_INFINITE;
                         }
                         continue;
                     }
                     if best_score >= beta {
-                        // Fail high - widen beta
-                        beta = beta.saturating_add(100);
-                        if beta >= VALUE_INFINITE - 100 {
+                        // Fail high - widen beta exponentially
+                        delta = delta.saturating_mul(2);
+                        beta = best_score_overall.saturating_add(delta);
+                        if delta >= 1000 {
+                            alpha = -VALUE_INFINITE;
                             beta = VALUE_INFINITE;
                         }
                         continue;
