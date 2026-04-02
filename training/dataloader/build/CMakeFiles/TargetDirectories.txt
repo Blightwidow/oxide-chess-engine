@@ -1,0 +1,3 @@
+/Users/theo.dammaretz/workspace/oxide-chess-bot/training/dataloader/build/CMakeFiles/binpack_loader.dir
+/Users/theo.dammaretz/workspace/oxide-chess-bot/training/dataloader/build/CMakeFiles/edit_cache.dir
+/Users/theo.dammaretz/workspace/oxide-chess-bot/training/dataloader/build/CMakeFiles/rebuild_cache.dir
