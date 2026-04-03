@@ -44,7 +44,7 @@ for net in "$NETS_DIR"/*.nnue; do
     echo "=========================================="
 
     # ── Step 1: Sanity check — eval startpos ──
-    info "Step 1/2: Sanity eval (startpos)"
+    info "Step 1/3: Sanity eval (startpos)"
     eval_output=$(printf "setoption name EvalFile value %s\nposition startpos\neval\nquit\n" "$net" | "$ENGINE" 2>&1)
 
     if echo "$eval_output" | grep -qi "error\|panic\|failed to load"; then
@@ -61,7 +61,7 @@ for net in "$NETS_DIR"/*.nnue; do
     fi
 
     # ── Step 2: Bench — no crashes + performance ──
-    info "Step 2/2: Quick bench (depth $BENCH_DEPTH, $BENCH_POSITIONS positions)"
+    info "Step 2/3: Quick bench (depth $BENCH_DEPTH, $BENCH_POSITIONS positions)"
     bench_output=$(printf "setoption name EvalFile value %s\nbench 16 1 %d %d\nquit\n" "$net" "$BENCH_DEPTH" "$BENCH_POSITIONS" | "$ENGINE" 2>&1)
 
     if echo "$bench_output" | grep -qi "panic\|error\|thread.*panicked"; then
@@ -74,6 +74,23 @@ for net in "$NETS_DIR"/*.nnue; do
             pass "Step 2: $bench_nodes nodes, $bench_nps nps"
         else
             fail "Step 2: no bench output"
+            net_ok=false
+        fi
+    fi
+
+    # ── Step 3: ERET — tactical accuracy ──
+    info "Step 3/3: ERET (1M nodes per position)"
+    eret_output=$(printf "setoption name EvalFile value %s\neret nodes 1000000\nquit\n" "$net" | "$ENGINE" 2>&1)
+
+    if echo "$eret_output" | grep -qi "panic\|error\|thread.*panicked"; then
+        fail "Step 3: ERET crashed"
+        net_ok=false
+    else
+        eret_score=$(echo "$eret_output" | grep "ERET Score" | awk '{print $NF}')
+        if [ -n "$eret_score" ]; then
+            pass "Step 3: ERET Score $eret_score"
+        else
+            fail "Step 3: no ERET output"
             net_ok=false
         fi
     fi
