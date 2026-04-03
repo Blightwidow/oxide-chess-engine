@@ -104,10 +104,22 @@ At the leaves of the main search, a quiescence search resolves tactical sequence
 
 The transposition table stores previously searched positions to avoid redundant work.
 
-- **Entry**: Zobrist key, depth, score, best move, node type (Exact / LowerBound / UpperBound)
+- **Bucket layout**: 3 entries per bucket (8 bytes each), 32-byte aligned buckets (cache-line friendly)
+- **Entry packing**: 16-bit key verification, u16 move, i16 value, u8 depth, packed generation (6 bits) + node type (2 bits)
+- **Indexing**: power-of-2 bitmask (no modulo), key16 from top 16 bits of zobrist for verification
 - **Default size**: 16 MB (configurable via UCI `Hash` option, 1-512 MB)
-- **Replacement**: age-based with a generation counter; stale entries from previous searches are always replaced; among same-age entries, deeper entries are preferred
-- **Hashfull**: sampled from the first 1000 entries, reported in UCI info strings
+- **Replacement**: prefer same-key or empty slots; otherwise evict lowest-quality entry (depth + generation bonus)
+- **Prefetch**: `_mm_prefetch` after `do_move` to warm L1 cache before child probe (x86_64 only)
+- **Hashfull**: sampled from first 333 buckets (999 entries), reported in UCI info strings
+
+## PV Tracking
+
+The search maintains a triangular PV table to track the principal variation across all plies.
+
+- **Structure**: `pv_table[ply][ply..pv_length[ply]]` — each ply stores its PV suffix
+- **Update**: on alpha improvement, the current move is prepended and the child PV is copied
+- **UCI output**: full multi-move PV printed in info lines; mate scores formatted as `score mate N`
+- **Ponder**: extracted from PV[1] (no TT probe needed)
 
 ## Constants
 
