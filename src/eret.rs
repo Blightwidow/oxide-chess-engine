@@ -308,7 +308,7 @@ pub fn run_eret(search: &mut Search, limit: EretLimit) {
 
         let legal_moves = search.movegen.legal_moves(&search.position);
 
-        let ok = if let Some(mv) = result {
+        let ok = if let Some((mv, _score)) = result {
             let mv_str = format!("{:?}", mv);
             let matches = position.expected_moves.iter().any(|san| {
                 san_to_move(san, &legal_moves, &search.position)

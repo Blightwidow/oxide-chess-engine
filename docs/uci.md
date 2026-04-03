@@ -48,6 +48,9 @@ Loads a NNUE network from a file path, replacing the embedded default. Useful fo
 ### `bench [hash_size] [threads] [depth]`
 Runs the benchmark suite (46 positions). Default depth: 13. Reports total nodes, time, and nodes/second.
 
+### `datagen [depth] [num_games] [output_path]`
+Generates self-play training data for NNUE training. Plays games against itself with random openings (8 random plies), fixed-depth search, and writes positions to a plain text file. Default: depth 8, 1000 games, `data/selfplay.txt`. Output format: `FEN;MOVE;SCORE;PLY;WDL` (one position per line). Use `tools/plain2binpack` to convert to Stockfish binpack format for training.
+
 ### `quit`
 Exits the engine.
 

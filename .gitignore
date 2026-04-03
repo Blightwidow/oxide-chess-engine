@@ -29,3 +29,6 @@ nets/*.log
 # Claude files
 .claude/plans/
 autoresearch/
+tools/plain2binpack
+data/*.txt
+data/*.binpack

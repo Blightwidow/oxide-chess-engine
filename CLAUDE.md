@@ -68,6 +68,7 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 | **defs** | `src/defs.rs` | Core types: `Bitboard`, `Piece`, `Side`, `Square` |
 | **hash** | `src/hash.rs` | Zobrist key generation |
 | **benchmark** | `src/benchmark.rs` | 46-position bench suite |
+| **datagen** | `src/datagen.rs` | Self-play training data generation |
 | **misc** | `src/misc.rs` | Bit manipulation utilities |
 
 ### Module Organization
@@ -96,6 +97,24 @@ Current search features (see `docs/search.md` for details):
 - Move ordering: TT move > captures (MVV-LVA + capture history) > killers/countermove > quiets (history + continuation history)
 - Continuation history (1-ply + 2-ply), capture history, correction history
 - Quiescence search (captures, en passant, promotions)
+
+## Training Data Generation
+
+Self-play data generation for NNUE training:
+
+```bash
+# Via UCI command: datagen <depth> <num_games> <output_path>
+printf "datagen 8 10000 data/selfplay.txt\n" | ./target/release/oxid
+
+# Via pipeline script (builds, generates, converts to binpack)
+./scripts/generate_data.sh 8 10000 selfplay
+
+# Convert plain text to binpack manually
+clang++ -O2 -std=c++20 -o tools/plain2binpack tools/plain2binpack.cpp
+./tools/plain2binpack data/selfplay.txt data/selfplay.binpack
+```
+
+Output format: `FEN;UCI_MOVE;SCORE;PLY;WDL` (semicolon-delimited, one position per line). Games use 8 random opening plies, win adjudication (5 consecutive |score| >= 3000cp), draw adjudication (10 consecutive |score| <= 5cp), and 400-ply max.
 
 ## Development Notes
 
