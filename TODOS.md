@@ -1,40 +1,40 @@
 # Oxid' Chess Engine — TODO / Roadmap (2625 → 2850+ Elo)
 
-## Phase A — Low-hanging fruit (~+50 Elo)
+## Phase A — Low-hanging fruit (~+50 Elo) ✓
 
 - [x] **Continuation history** (+30-40 Elo) — shipped in v1.3.0
 - [x] **Capture history** (+10-15 Elo) — shipped in v1.3.0
 - [x] **Bad captures stage** (+5-10 Elo) — implemented in `src/search/move_picker.rs`
 
-## Phase B (~+40 Elo cumulative)
+## Phase B (~+40 Elo cumulative) ✓
 
-- [ ] **Multi-bucket TT** (+30-50 Elo) — `src/evaluate/transposition.rs`
+- [x] **Multi-bucket TT** (+30-50 Elo) — `src/evaluate/transposition.rs`
   - 3 entries per bucket (≤48 bytes, cache-line friendly)
   - Tighter packing: 16-bit key, u16 move, depth+gen+node_type packed
   - Replacement: always-replace shallowest/oldest; keep one depth-preferred slot
   - TT prefetch (`_mm_prefetch`) before `do_move`
 
-- [ ] **PV tracking** (+5 Elo indirect) — `src/search.rs`
+- [x] **PV tracking** (+5 Elo indirect) — `src/search.rs`
   - Add `pv_table: [[Move; MAX_PLY]; MAX_PLY]` and `pv_length`
   - Copy child PV on alpha improvement
   - Print full PV in UCI info output
 
-## Phase C (~+15 Elo cumulative)
+## Phase C (~+15 Elo cumulative) — In Progress
 
-- [ ] **SIMD for NNUE** (+5-10 Elo via NPS) — `src/nnue/`
-  - AVX2 intrinsics for accumulator ops and forward pass
-  - SCReLU → `_mm256_min/max_epi16` + `_mm256_madd_epi16`
+- [x] **SIMD for NNUE** (+5-10 Elo via NPS) — `src/nnue/`
+  - NEON (aarch64) + AVX2 (x86_64) for accumulator ops and SCReLU forward pass
+  - Aligned `Accumulator` struct, scalar fallback for other architectures
 
 - [ ] **Singular extension tuning** (+5-10 Elo) — `src/search.rs`
-  - Lower SE threshold: `depth >= 8` (from 10)
-  - Double extensions when very singular (`s < se_beta - depth*2`)
-  - Negative extensions on SE fail-high
+  - ~~Lower SE threshold: `depth >= 8` (from 10)~~ (already done)
+  - Double extensions when very singular (`s < se_beta - depth*2`) — SPRT failed at -8 Elo, needs revisiting
+  - Negative extensions on SE fail-high — likely too aggressive, caused regression
   - Cap total extensions
 
 - [ ] **Aspiration window tuning** (+2-5 Elo) — `src/search.rs`
-  - Smaller initial window (±12-15cp)
-  - Exponential widening (×2/×3) instead of additive (+100cp)
-  - Don't reset best_move on fail-low
+  - Smaller initial window (±12-15cp) — SPRT failed badly (-76 Elo, massive timeouts)
+  - Exponential widening needs rework: re-searching all root moves on fail is too expensive
+  - Consider PVS-style approach: only re-search the failing move with wider window
 
 ## Phase D (~+15 Elo cumulative)
 
@@ -68,15 +68,6 @@
   - Add `OwnBook` and `BookFile` UCI options
   - Fall through to engine search when out of book
 
-## Phase F — Parallelism (~+50-80 Elo at 4 threads)
-
-- [ ] **Lazy SMP** — `src/search.rs`, `src/uci.rs`, `src/position.rs`
-  - Convert `Rc<Bitboards>` and `Rc<Hasher>` to `Arc`
-  - Shared TT via `Arc<TranspositionTable>` with lock-free entries
-  - Each thread: own Search instance with separate history/killers
-  - Main thread controls time via `AtomicBool` stop flag
-  - Aggregate `nodes_searched` across threads
-
 ---
 
 ## Verification checklist (each change)
@@ -90,8 +81,8 @@
 
 ## Unresolved questions
 
-1. Preferred net training dataset beyond self-play? (Lc0 data, Stockfish data, etc.)
-2. Target thread count for SMP? (affects architecture — 4 vs 16+ threads)
-3. Priority: SMP vs NNUE improvements? (SMP more effort but guaranteed; NNUE depends on data quality)
-4. DFRC/Chess960 support? (affects datagen strategy)
-5. Specific Elo target or tournament format? (affects time management tuning)
+1. Training data: use Stockfish or Lc0 data — no strong preference, either is fine for current strength level
+2. ~~SMP thread count~~ — SMP scrapped for now (overcomplex for low return)
+3. ~~SMP vs NNUE priority~~ — resolved: NNUE improvements next
+4. No DFRC/Chess960 support planned
+5. No specific Elo target or tournament — exploratory development
