@@ -123,6 +123,7 @@ The engine supports an optional NNUE (Efficiently Updatable Neural Network) eval
 - **Perspective**: White and black perspectives computed separately. For black, colors are swapped and squares vertically flipped.
 - **Quantization**: Accumulator clipped to [0, 255], output scaled by 400/(255×64)
 - **Arithmetic**: Pure integer (i16/i32), no floating point
+- **SIMD**: Accumulator updates and SCReLU activation use platform-specific SIMD — NEON on aarch64, AVX2 on x86_64, with scalar fallback for other architectures. Accumulators are 32-byte aligned for AVX2 load/store.
 
 ### Network File Format (v2)
 

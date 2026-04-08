@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 /// 768 input features per bucket: 2 colors × 6 piece types × 64 squares
 pub const FEATURE_SIZE: usize = 768;
 /// Number of king buckets (one per rank, with horizontal mirroring)
@@ -14,9 +16,35 @@ pub const QA: i32 = 255;
 pub const QB: i32 = 64;
 /// Scale factor to convert network output to centipawns
 pub const SCALE: i32 = 400;
-/// Accumulator type: one per perspective (white/black)
-pub type Accumulator = [i16; HIDDEN_SIZE];
 /// Network file format version
 pub const NET_VERSION: u32 = 2;
 /// Magic bytes for the .nnue file header
 pub const NET_MAGIC: [u8; 4] = *b"OXNN";
+
+/// 32-byte aligned accumulator for AVX2 SIMD operations.
+#[repr(C, align(32))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Accumulator {
+    pub data: [i16; HIDDEN_SIZE],
+}
+
+impl Accumulator {
+    pub const fn zeroed() -> Self {
+        Self {
+            data: [0i16; HIDDEN_SIZE],
+        }
+    }
+}
+
+impl Deref for Accumulator {
+    type Target = [i16; HIDDEN_SIZE];
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for Accumulator {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
