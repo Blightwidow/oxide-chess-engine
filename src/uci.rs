@@ -65,6 +65,18 @@ impl Uci {
                     None => crate::eret::EretLimit::Seconds(1),
                 };
                 crate::eret::run_eret(search, limit);
+            } else if token == "datagen" {
+                let depth = args.next().and_then(|s| s.parse().ok()).unwrap_or(8);
+                let num_games = args.next().and_then(|s| s.parse().ok()).unwrap_or(1000);
+                let output_path = args.next().unwrap_or("data/selfplay.txt").to_string();
+                crate::datagen::run_datagen(
+                    search,
+                    crate::datagen::DatagenConfig {
+                        depth,
+                        num_games,
+                        output_path,
+                    },
+                );
             } else if token == "bench_perft" {
                 Uci::bench_perft(search, &mut args);
             } else if token == "eval" {

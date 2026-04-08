@@ -92,6 +92,8 @@ pub struct Search {
     pub eval: Eval,
     pub nnue: NnueEval,
     pub nodes_searched: usize,
+    /// When true, suppress UCI info output (used by datagen).
+    pub silent: bool,
     seldepth: usize,
     time: TimeManager,
     start_time: time::Instant,
@@ -141,6 +143,7 @@ impl Search {
             position,
             movegen,
             nodes_searched: 0,
+            silent: false,
             seldepth: 0,
             eval,
             nnue,
@@ -179,7 +182,7 @@ impl Search {
         let result = self.run_and_return(limits);
 
         if limits.depth > 0 {
-            if let Some(mv) = result {
+            if let Some((mv, _score)) = result {
                 // Probe TT for ponder move
                 self.position.do_move(mv);
                 let ponder = self
@@ -204,8 +207,8 @@ impl Search {
         }
     }
 
-    /// Run search and return best move without printing bestmove line.
-    pub fn run_and_return(&mut self, limits: SearchLimits) -> Option<Move> {
+    /// Run search and return best move + score without printing bestmove line.
+    pub fn run_and_return(&mut self, limits: SearchLimits) -> Option<(Move, i16)> {
         self.start_time = time::Instant::now();
 
         // Reset per-search state
@@ -233,7 +236,7 @@ impl Search {
             self.position.states.last().unwrap().game_ply,
         );
 
-        self.search(limits.depth).map(|(mv, _score)| mv)
+        self.search(limits.depth)
     }
 
     fn evaluate_position(&self) -> i16 {
@@ -608,13 +611,15 @@ impl Search {
                 prev_best_score = best_score;
                 best_move = Some(mv);
                 best_score_overall = best_score;
-                let elapsed_ms = self.start_time.elapsed().as_millis().max(1) as usize;
-                let nps = self.nodes_searched * 1000 / elapsed_ms;
-                let hashfull = self.eval.transposition_table.hashfull();
-                println!(
-                    "info depth {} seldepth {} multipv 1 score cp {} nodes {} nps {} hashfull {} tbhits 0 time {} pv {:?}",
-                    current_depth, self.seldepth, best_score, self.nodes_searched, nps, hashfull, elapsed_ms, mv
-                );
+                if !self.silent {
+                    let elapsed_ms = self.start_time.elapsed().as_millis().max(1) as usize;
+                    let nps = self.nodes_searched * 1000 / elapsed_ms;
+                    let hashfull = self.eval.transposition_table.hashfull();
+                    println!(
+                        "info depth {} seldepth {} multipv 1 score cp {} nodes {} nps {} hashfull {} tbhits 0 time {} pv {:?}",
+                        current_depth, self.seldepth, best_score, self.nodes_searched, nps, hashfull, elapsed_ms, mv
+                    );
+                }
             }
         }
 

@@ -215,8 +215,8 @@ def train(
 
 def main():
     parser = argparse.ArgumentParser(description="Oxide NNUE PyTorch Trainer")
-    parser.add_argument("data", help="Path to preprocessed .bin data file")
-    parser.add_argument("--validation", help="Path to preprocessed validation .bin file")
+    parser.add_argument("data", help="Path to directory containing .binpack training files")
+    parser.add_argument("--validation", help="Path to directory containing .binpack validation files")
     parser.add_argument("--resume", help="Path to checkpoint directory to resume from")
     parser.add_argument("--checkpoint-dir", default=CHECKPOINT_DIR, help="Checkpoint output directory")
     parser.add_argument("--superbatches", type=int, default=END_SUPERBATCH, help="Total superbatches to train")

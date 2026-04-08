@@ -32,6 +32,7 @@ Shared data (`Bitboards`, `Hasher`) is distributed via `Rc` (reference counting)
 | **defs** | `src/defs.rs` | Core types: `Bitboard`, `Piece`, `Side`, `Square` |
 | **hash** | `src/hash.rs` | Zobrist key generation |
 | **benchmark** | `src/benchmark.rs` | 46-position bench suite |
+| **datagen** | `src/datagen.rs` | Self-play training data generation |
 | **misc** | `src/misc.rs` | Bit manipulation utilities |
 
 ## Module Organization
