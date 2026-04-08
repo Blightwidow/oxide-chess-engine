@@ -35,7 +35,7 @@ mkdir -p "${DATA_DIR}"
 
 # Run datagen
 echo "Running datagen..."
-printf "datagen %d %d %s\n" "${DEPTH}" "${NUM_GAMES}" "${TXT_FILE}" | "${ENGINE}" 2>&1
+printf "datagen %d %d %s\nquit\n" "${DEPTH}" "${NUM_GAMES}" "${TXT_FILE}" | "${ENGINE}" 2>&1
 
 # Convert to binpack
 echo "Converting to binpack..."

@@ -75,16 +75,19 @@ static void extract_features(
 ) {
     const auto& pos = entry.pos;
     const chess::Color stm = pos.sideToMove();
+    const bool stm_is_black = (stm == chess::Color::Black);
 
-    // STM king bucket: rank 0-7, with horizontal mirror for files e-h
+    // STM king bucket: flip vertically for black perspective, then horizontal mirror
     int stm_ksq_idx = static_cast<int>(pos.kingSquare(stm));
+    if (stm_is_black) stm_ksq_idx ^= 56;
     const bool stm_needs_mirror = (stm_ksq_idx & 7) > 3;
     if (stm_needs_mirror) stm_ksq_idx ^= 7;
     const int stm_bucket_offset = (stm_ksq_idx >> 3) * 768;
     const int stm_mirror = stm_needs_mirror ? 7 : 0;
 
-    // NTM king bucket
+    // NTM king bucket: flip vertically for black perspective, then horizontal mirror
     int ntm_ksq_idx = static_cast<int>(pos.kingSquare(!stm));
+    if (!stm_is_black) ntm_ksq_idx ^= 56;  // NTM is black when STM is white
     const bool ntm_needs_mirror = (ntm_ksq_idx & 7) > 3;
     if (ntm_needs_mirror) ntm_ksq_idx ^= 7;
     const int ntm_bucket_offset = (ntm_ksq_idx >> 3) * 768;
@@ -103,13 +106,15 @@ static void extract_features(
         const int color_rel = (piece.color() == stm) ? 0 : 1;
 
         // STM perspective: our pieces at offset 0, their pieces at 384
-        // square is horizontally mirrored if king is on files e-h
-        const int stm_base = color_rel * 384 + type * 64 + sq_idx;
+        // Flip square vertically for black perspective; horizontal mirror if king on files e-h
+        const int stm_sq = stm_is_black ? (sq_idx ^ 56) : sq_idx;
+        const int stm_base = color_rel * 384 + type * 64 + stm_sq;
         stm_out.push_back(static_cast<int64_t>(stm_bucket_offset + (stm_base ^ stm_mirror)));
 
         // NTM perspective: their pieces at offset 0, our pieces at 384
-        // squares are also flipped vertically (^ 56) to match opponent's view
-        const int ntm_base = (1 - color_rel) * 384 + type * 64 + (sq_idx ^ 56);
+        // Flip square vertically for black perspective (NTM is black when STM is white)
+        const int ntm_sq = stm_is_black ? sq_idx : (sq_idx ^ 56);
+        const int ntm_base = (1 - color_rel) * 384 + type * 64 + ntm_sq;
         ntm_out.push_back(static_cast<int64_t>(ntm_bucket_offset + (ntm_base ^ ntm_mirror)));
     }
 }
