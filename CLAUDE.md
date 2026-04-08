@@ -46,6 +46,7 @@ Detailed docs live in `docs/`. Keep them in sync when making changes:
 - `docs/search.md` — Search algorithm, pruning, reductions, extensions, move ordering
 - `docs/evaluation.md` — Tapered eval, material values, piece-square tables
 - `docs/uci.md` — Supported UCI commands and options
+- `docs/time.md` — Time allocation, soft/hard limits, adaptive scaling signals
 
 When adding or changing a search technique, evaluation term, or UCI command, update the corresponding doc file and the feature list in `README.md`.
 

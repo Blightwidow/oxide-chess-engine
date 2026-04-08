@@ -26,7 +26,7 @@ use crate::{
 use self::move_picker::{MovePicker, QMovePicker};
 
 use self::defs::*;
-use crate::time::defs::CHECK_INTERVAL;
+use crate::time::defs::*;
 
 /// Adjust a mate score for TT storage: convert ply-relative to root-relative.
 fn adjust_mate_score_to_tt(score: i16, ply: usize) -> i16 {
@@ -450,6 +450,7 @@ impl Search {
         let mut best_score_overall: i16 = -VALUE_INFINITE;
         let mut prev_best_move = Move::none();
         let mut stability_count: u32 = 0;
+        let mut prev_best_score: i16 = -VALUE_INFINITE;
 
         for current_depth in 1..=max_depth {
             if current_depth > 1 && self.time.should_stop_soft() {
@@ -479,21 +480,25 @@ impl Search {
                 (-VALUE_INFINITE, VALUE_INFINITE)
             };
 
+            let mut root_move_nodes: ArrayVec<(Move, usize), 256> = ArrayVec::new();
             loop {
                 best_score = -VALUE_INFINITE;
                 current_best_move = None;
                 move_scores.clear();
+                root_move_nodes.clear();
 
                 for &mv in sorted_moves.iter() {
                     // Store root move info for continuation history
                     self.ply_piece_type[0] = type_of_piece(self.position.board[mv.from_sq()]);
                     self.ply_to_square[0] = mv.to_sq();
+                    let nodes_before = self.nodes_searched;
                     self.do_move_nnue(mv);
                     let score = self
                         .alpha_beta(current_depth - 1, -beta, -alpha, 1, true, Move::none())
                         .map(|s| -s);
                     self.undo_move_nnue(mv);
 
+                    root_move_nodes.push((mv, self.nodes_searched - nodes_before));
                     move_scores.push((mv, score));
 
                     match score {
@@ -539,16 +544,68 @@ impl Search {
             }
 
             if let Some(mv) = current_best_move {
-                // Best-move stability: scale soft time limit based on how stable the best move is
+                // ─── Soft limit scaling ──────────────────────────────────────
+                let mut tm_factor = 1.0_f64;
+
+                if current_depth >= 6 {
+                    // (1) Node TM: fraction of nodes spent on best move
+                    let total_nodes: usize = root_move_nodes.iter().map(|(_, n)| *n).sum();
+                    if total_nodes > 0 {
+                        let best_move_nodes = root_move_nodes
+                            .iter()
+                            .find(|(m, _)| *m == mv)
+                            .map(|(_, n)| *n)
+                            .unwrap_or(0);
+                        let fraction = best_move_nodes as f64 / total_nodes as f64;
+                        if fraction > NODE_TM_EARLY_STOP_THRESHOLD {
+                            tm_factor *= NODE_TM_EARLY_FACTOR;
+                        } else if fraction < NODE_TM_EXTEND_THRESHOLD {
+                            tm_factor *= NODE_TM_EXTEND_FACTOR;
+                        }
+                    }
+
+                    // (2) Score stability: extend on score drops between iterations
+                    if prev_best_score > -VALUE_INFINITE + 100
+                        && best_score.abs() < VALUE_MATE - 100
+                        && prev_best_score.abs() < VALUE_MATE - 100
+                    {
+                        let score_drop = prev_best_score - best_score;
+                        if score_drop > SCORE_DROP_THRESHOLD {
+                            tm_factor *= SCORE_DROP_EXTEND_FACTOR;
+                        } else if score_drop.abs() < 10 {
+                            tm_factor *= SCORE_STABLE_FACTOR;
+                        }
+                    }
+
+                    // (3) Eval complexity: spread between #1 and #2 root moves
+                    if move_scores.len() >= 2 {
+                        let mut top_scores: ArrayVec<i16, 256> = move_scores.iter().filter_map(|(_, s)| *s).collect();
+                        top_scores.sort_unstable_by(|a, b| b.cmp(a));
+                        if top_scores.len() >= 2 {
+                            let spread = top_scores[0] - top_scores[1];
+                            if spread < COMPLEXITY_TIGHT_THRESHOLD {
+                                tm_factor *= COMPLEXITY_TIGHT_FACTOR;
+                            } else if spread > COMPLEXITY_WIDE_THRESHOLD {
+                                tm_factor *= COMPLEXITY_EASY_FACTOR;
+                            }
+                        }
+                    }
+                }
+
+                // Best-move stability
                 if mv == prev_best_move {
                     stability_count += 1;
                 } else {
                     stability_count = 0;
                 }
                 prev_best_move = mv;
-                let factor = 0.5 + 0.8 * (1.0 - (stability_count as f64 / 5.0).min(1.0));
-                self.time.scale_soft_limit(factor);
+                let stability_factor = 0.5 + 0.8 * (1.0 - (stability_count as f64 / 5.0).min(1.0));
 
+                // Apply combined factor (stability * node/score/complexity signals)
+                let combined = (stability_factor * tm_factor).clamp(0.3, 2.0);
+                self.time.scale_soft_limit(combined);
+
+                prev_best_score = best_score;
                 best_move = Some(mv);
                 best_score_overall = best_score;
                 let elapsed_ms = self.start_time.elapsed().as_millis().max(1) as usize;
