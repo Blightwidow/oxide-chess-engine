@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Run SPRT tests for every .nnue file in nets/ against the currently embedded net.
-# Skips the baseline net itself. Results are logged to nets/<hash>.sprt.log.
+# Run SPRT tests for every .nnue file in nets/ against a base engine binary.
+# Skips the committed (embedded) net. Results are logged to nets/<hash>.sprt.log.
 # Expects to be run from the repo root.
+#
+# Usage: ./scripts/sprt_all_nets.sh [base_engine]
+#   base_engine: path to baseline engine binary (default: ./base/release/oxid)
+#
+# Flags:
+#   --summary    Print summary of previous results and exit
 
 set -euo pipefail
 
 NETS_DIR="nets"
-BASE_NAME=$(grep 'pub const DEFAULT_EVAL_FILE' src/main.rs | sed 's/.*"\(.*\)".*/\1/')
-BASE_NET="nets/${BASE_NAME}"
+ENGINE="./target/release/oxid"
 FASTCHESS="./bin/fastchess"
-ENGINE="./target/release/oxide"
 OPENINGS="data/openings.pgn"
 CONCURRENCY=6
 ROUNDS=15000
@@ -21,10 +25,31 @@ ELO1=5
 ALPHA=0.05
 BETA=0.05
 
+# Detect the committed (embedded) net from .gitignore
+committed_net=""
+if [ -f ".gitignore" ]; then
+    committed_net=$(grep '!nets/' .gitignore 2>/dev/null | sed 's/.*!nets\///' | head -1 || true)
+fi
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# Parse arguments: handle --summary before positional args
+BASE_ENGINE="./base/release/oxid"
+for arg in "$@"; do
+    case "$arg" in
+        --summary) ;;  # handled below
+        *) BASE_ENGINE="$arg" ;;
+    esac
+done
+
 # Print summary of all previously tested nets and exit
 print_summary() {
     echo "=========================================="
-    echo "  SPRT Test Summary (baseline: $(basename "$BASE_NET"))"
+    echo "  SPRT Test Summary (base: $(basename "$BASE_ENGINE"))"
     echo "=========================================="
     echo ""
 
@@ -62,13 +87,16 @@ print_summary() {
 }
 
 # If --summary is passed, just print summary and exit
-if [[ "${1:-}" == "--summary" ]]; then
-    print_summary
-    exit 0
-fi
+for arg in "$@"; do
+    if [[ "$arg" == "--summary" ]]; then
+        print_summary
+        exit 0
+    fi
+done
 
-if [ ! -f "$BASE_NET" ]; then
-    echo "Error: baseline net $BASE_NET not found."
+if [ ! -f "$BASE_ENGINE" ]; then
+    echo "Error: base engine not found at $BASE_ENGINE."
+    echo "Build it first: cargo build -r --target-dir=base"
     exit 1
 fi
 
@@ -77,7 +105,7 @@ if [ ! -f "$FASTCHESS" ]; then
     exit 1
 fi
 
-# Build engine if needed
+# Build candidate engine if needed
 if [ ! -f "$ENGINE" ]; then
     echo "Building engine..."
     cargo build -r
@@ -93,22 +121,25 @@ skipped=0
 
 for net in "$NETS_DIR"/*.nnue; do
     [ -f "$net" ] || continue
+    net_name=$(basename "$net")
 
-    # Skip the baseline
-    if [ "$(realpath "$net")" = "$(realpath "$BASE_NET")" ]; then
+    # Skip the committed net (likely incompatible architecture version)
+    if [ "$net_name" = "$committed_net" ]; then
+        printf "${YELLOW}SKIP${RESET} %s (committed net)\n" "$net_name"
+        skipped=$((skipped + 1))
         continue
     fi
 
     logfile="${net%.nnue}.sprt.log"
 
     if [ -f "$logfile" ]; then
-        echo "Skipping $(basename "$net") — already tested (see $logfile)"
+        echo "Skipping $net_name — already tested (see $logfile)"
         skipped=$((skipped + 1))
         continue
     fi
 
     echo "=========================================="
-    echo "Testing $(basename "$net") vs $(basename "$BASE_NET")"
+    echo "Testing $net_name vs $(basename "$BASE_ENGINE")"
     echo "=========================================="
 
     openings_args=()
@@ -116,9 +147,11 @@ for net in "$NETS_DIR"/*.nnue; do
         openings_args=(-openings file="$OPENINGS" format=pgn order=random)
     fi
 
+    abs_net="$(cd "$(dirname "$net")" && pwd)/$(basename "$net")"
+
     "$FASTCHESS" \
-        -engine cmd="$ENGINE" name=candidate "option.EvalFile=$net" \
-        -engine cmd="$ENGINE" name=base "option.EvalFile=$BASE_NET" \
+        -engine cmd="$ENGINE" name=candidate "option.EvalFile=$abs_net" \
+        -engine cmd="$BASE_ENGINE" name=base \
         -each tc="$TC" \
         "${openings_args[@]}" \
         -rounds "$ROUNDS" -repeat -concurrency "$CONCURRENCY" -recover \
@@ -127,13 +160,13 @@ for net in "$NETS_DIR"/*.nnue; do
 
     # Check SPRT result
     if grep -q "H1 was accepted" "$logfile"; then
-        echo "PASSED: $(basename "$net")"
+        printf "${GREEN}PASSED${RESET}: %s\n" "$net_name"
         passed=$((passed + 1))
     elif grep -q "H0 was accepted" "$logfile"; then
-        echo "FAILED: $(basename "$net")"
+        printf "${RED}FAILED${RESET}: %s\n" "$net_name"
         failed=$((failed + 1))
     else
-        echo "INCONCLUSIVE: $(basename "$net") (check $logfile)"
+        printf "${YELLOW}INCONCLUSIVE${RESET}: %s (check %s)\n" "$net_name" "$logfile"
     fi
 
     echo ""

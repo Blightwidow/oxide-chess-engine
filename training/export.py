@@ -1,12 +1,12 @@
-"""Export trained PyTorch NNUE weights to OXNN v2 binary format.
+"""Export trained PyTorch NNUE weights to OXNN v3 binary format.
 
-OXNN v2 layout:
+OXNN v3 layout:
   Header (24 bytes):
     "OXNN"          4 bytes (magic)
-    version=2       u32 LE
+    version=3       u32 LE
     num_buckets=8   u32 LE
     feature_size=768 u32 LE
-    hidden_size=256 u32 LE
+    hidden_size=384 u32 LE
     l1_size=32      u32 LE
   Weights (all i16 LE):
     L0 weights: [BUCKET_FEATURE_SIZE][HIDDEN_SIZE] row-major
@@ -44,7 +44,7 @@ def quantize_and_clamp(tensor: torch.Tensor, scale: float) -> np.ndarray:
 
 
 def export_oxnn(checkpoint_path: str, output_path: str):
-    """Export a PyTorch checkpoint to OXNN v2 format."""
+    """Export a PyTorch checkpoint to OXNN v3 format."""
     model = OxideNNUE()
     state = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     model.load_state_dict(state)
@@ -62,22 +62,22 @@ def export_oxnn(checkpoint_path: str, output_path: str):
 
     # Quantize
     # L0 weights/biases at QA scale
-    quantized_feature_transformer_weight = quantize_and_clamp(feature_transformer_weight, QA)  # [6144, 256]
-    quantized_feature_transformer_bias = quantize_and_clamp(feature_transformer_bias, QA)      # [256]
+    quantized_feature_transformer_weight = quantize_and_clamp(feature_transformer_weight, QA)  # [6144, 384]
+    quantized_feature_transformer_bias = quantize_and_clamp(feature_transformer_bias, QA)      # [384]
 
     # L1 weights at QB scale, biases at QA*QB scale
-    quantized_l1_weight = quantize_and_clamp(l1_weight, QB)           # [32, 512]
+    quantized_l1_weight = quantize_and_clamp(l1_weight, QB)           # [32, 768]
     quantized_l1_bias = quantize_and_clamp(l1_bias, QA * QB)          # [32]
 
     # L2 weights at QB scale, bias at QA*QB scale
     quantized_l2_weight = quantize_and_clamp(l2_weight, QB)           # [1, 32]
     quantized_l2_bias = quantize_and_clamp(l2_bias, QA * QB)          # [1]
 
-    # Write OXNN v2 file
+    # Write OXNN v3 file
     with open(output_path, "wb") as output_file:
         # Header (24 bytes)
         output_file.write(b"OXNN")
-        output_file.write(struct.pack("<I", 2))            # version
+        output_file.write(struct.pack("<I", 3))            # version
         output_file.write(struct.pack("<I", NUM_BUCKETS))  # num_buckets
         output_file.write(struct.pack("<I", FEATURE_SIZE)) # feature_size
         output_file.write(struct.pack("<I", HIDDEN_SIZE))  # hidden_size
@@ -92,7 +92,7 @@ def export_oxnn(checkpoint_path: str, output_path: str):
         # L1 weights: [HIDDEN_SIZE*2][L1_SIZE] — file format is NOT transposed
         # PyTorch Linear stores weights as [out_features, in_features] = [L1_SIZE, HIDDEN_SIZE*2]
         # We need [HIDDEN_SIZE*2, L1_SIZE] for the file format, so transpose
-        quantized_l1_weight_file = quantized_l1_weight.T  # [512, 32]
+        quantized_l1_weight_file = quantized_l1_weight.T  # [768, 32]
         assert quantized_l1_weight_file.shape == (HIDDEN_SIZE * 2, L1_SIZE)
         output_file.write(np.ascontiguousarray(quantized_l1_weight_file).tobytes())
 
@@ -108,11 +108,11 @@ def export_oxnn(checkpoint_path: str, output_path: str):
     file_size = Path(output_path).stat().st_size
     expected_size = 24 + (BUCKET_FEATURE_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * 2 * L1_SIZE + L1_SIZE + L1_SIZE + 1) * 2
     assert file_size == expected_size, f"File size mismatch: {file_size} != {expected_size}"
-    print(f"Exported OXNN v2: {output_path} ({file_size:,} bytes)")
+    print(f"Exported OXNN v3: {output_path} ({file_size:,} bytes)")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export NNUE weights to OXNN v2 format")
+    parser = argparse.ArgumentParser(description="Export NNUE weights to OXNN v3 format")
     parser.add_argument("checkpoint", help="Path to model.pt checkpoint file")
     parser.add_argument("output", help="Output .nnue file path")
     arguments = parser.parse_args()

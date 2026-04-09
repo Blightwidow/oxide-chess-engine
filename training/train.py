@@ -102,9 +102,10 @@ def train(
     checkpoint_directory: str = CHECKPOINT_DIR,
     end_superbatch: int = END_SUPERBATCH,
     save_rate: int = SAVE_RATE,
+    device_override: str | None = None,
 ):
     """Main training loop."""
-    device = get_device()
+    device = torch.device(device_override) if device_override else get_device()
     print(f"Device: {device}")
 
     # Set MPS fallback for unsupported ops
@@ -221,6 +222,7 @@ def main():
     parser.add_argument("--checkpoint-dir", default=CHECKPOINT_DIR, help="Checkpoint output directory")
     parser.add_argument("--superbatches", type=int, default=END_SUPERBATCH, help="Total superbatches to train")
     parser.add_argument("--save-rate", type=int, default=SAVE_RATE, help="Save checkpoint every N superbatches")
+    parser.add_argument("--device", type=str, default=None, help="Force device (cpu, mps, cuda)")
     arguments = parser.parse_args()
 
     train(
@@ -230,6 +232,7 @@ def main():
         checkpoint_directory=arguments.checkpoint_dir,
         end_superbatch=arguments.superbatches,
         save_rate=arguments.save_rate,
+        device_override=arguments.device,
     )
 
 

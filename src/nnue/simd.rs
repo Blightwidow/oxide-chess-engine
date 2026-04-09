@@ -4,7 +4,7 @@ use super::defs::{Accumulator, HIDDEN_SIZE, QA};
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-pub unsafe fn add_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub unsafe fn add_i16(destination: &mut Accumulator, source: &Accumulator) {
     use std::arch::x86_64::*;
     let destination_ptr = destination.data.as_mut_ptr();
     let source_ptr = source.data.as_ptr();
@@ -17,7 +17,7 @@ pub unsafe fn add_i16_256(destination: &mut Accumulator, source: &Accumulator) {
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-pub unsafe fn sub_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub unsafe fn sub_i16(destination: &mut Accumulator, source: &Accumulator) {
     use std::arch::x86_64::*;
     let destination_ptr = destination.data.as_mut_ptr();
     let source_ptr = source.data.as_ptr();
@@ -56,7 +56,7 @@ pub unsafe fn screlu_activate(accumulator: &Accumulator, output: &mut [i32], out
 // ─── NEON (aarch64) ─────────────────────────────────────────────────────────
 
 #[cfg(target_arch = "aarch64")]
-pub fn add_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub fn add_i16(destination: &mut Accumulator, source: &Accumulator) {
     use std::arch::aarch64::*;
     let destination_ptr = destination.data.as_mut_ptr();
     let source_ptr = source.data.as_ptr();
@@ -70,7 +70,7 @@ pub fn add_i16_256(destination: &mut Accumulator, source: &Accumulator) {
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn sub_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub fn sub_i16(destination: &mut Accumulator, source: &Accumulator) {
     use std::arch::aarch64::*;
     let destination_ptr = destination.data.as_mut_ptr();
     let source_ptr = source.data.as_ptr();
@@ -109,14 +109,14 @@ pub fn screlu_activate(accumulator: &Accumulator, output: &mut [i32], output_off
 // ─── Scalar fallback ────────────────────────────────────────────────────────
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn add_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub fn add_i16(destination: &mut Accumulator, source: &Accumulator) {
     for index in 0..HIDDEN_SIZE {
         destination.data[index] += source.data[index];
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn sub_i16_256(destination: &mut Accumulator, source: &Accumulator) {
+pub fn sub_i16(destination: &mut Accumulator, source: &Accumulator) {
     for index in 0..HIDDEN_SIZE {
         destination.data[index] -= source.data[index];
     }

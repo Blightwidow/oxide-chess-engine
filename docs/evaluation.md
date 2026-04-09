@@ -112,8 +112,8 @@ The engine supports an optional NNUE (Efficiently Updatable Neural Network) eval
 ### Architecture
 
 ```
-(8 buckets × 768) inputs → [256] accumulator (per perspective) → SCReLU
-[512] concatenated → [32] hidden → SCReLU → [1] output → scale to centipawns
+(8 buckets × 768) inputs → [384] accumulator (per perspective) → SCReLU
+[768] concatenated → [32] hidden → SCReLU → [1] output → scale to centipawns
 ```
 
 - **Input features**: 6144 = 8 king buckets × 768 (2 colors × 6 piece types × 64 squares)
@@ -125,15 +125,15 @@ The engine supports an optional NNUE (Efficiently Updatable Neural Network) eval
 - **Arithmetic**: Pure integer (i16/i32), no floating point
 - **SIMD**: Accumulator updates and SCReLU activation use platform-specific SIMD — NEON on aarch64, AVX2 on x86_64, with scalar fallback for other architectures. Accumulators are 32-byte aligned for AVX2 load/store.
 
-### Network File Format (v2)
+### Network File Format (v3)
 
 Binary `.nnue` file with header:
 - Magic: `OXNN` (4 bytes)
-- Version: `2` (u32 LE)
+- Version: `3` (u32 LE)
 - Num buckets, feature size, hidden size, L1 size (4 × u32 LE)
 - Weights and biases as i16 little-endian
 
-Default path: `nets/default.nnue`. Configurable via `setoption name EvalFile value <path>`.
+Configurable via `setoption name EvalFile value <path>`. The default net is embedded at compile time via `include_bytes!`.
 
 ### Fallback
 
