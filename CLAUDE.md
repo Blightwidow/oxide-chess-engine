@@ -70,6 +70,7 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 | **hash** | `src/hash.rs` | Zobrist key generation |
 | **benchmark** | `src/benchmark.rs` | 46-position bench suite |
 | **datagen** | `src/datagen.rs` | Self-play training data generation |
+| **tablebase** | `src/tablebase.rs` | Syzygy endgame tablebase probing (via pyrrhic-rs) |
 | **misc** | `src/misc.rs` | Bit manipulation utilities |
 
 ### Module Organization
@@ -98,6 +99,7 @@ Current search features (see `docs/search.md` for details):
 - Move ordering: TT move > captures (MVV-LVA + capture history) > killers/countermove > quiets (history + continuation history)
 - Continuation history (1-ply + 2-ply), capture history, correction history
 - Quiescence search (captures, en passant, promotions)
+- Syzygy endgame tablebases: root DTZ probe, in-search WDL probe
 
 ## Training Data Generation
 
@@ -124,7 +126,7 @@ Output format: `FEN;UCI_MOVE;SCORE;PLY;WDL` (semicolon-delimited, one position p
 
 ## Conventions
 
-- Rust 2021 edition, single dependency: `arrayvec`
+- Rust 2021 edition, dependencies: `arrayvec`, `pyrrhic-rs`
 - `rustfmt.toml`: `max_width = 120`
 - Run `cargo fmt` after changes to format code
 - Run `cargo clippy` before committing

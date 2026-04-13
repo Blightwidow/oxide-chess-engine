@@ -36,6 +36,7 @@ cargo run -r -- bench 32 1 15      # Custom: 32 MB hash, 1 thread, depth 15
 |--------|------|---------|-------------|
 | `Hash` | spin | 16 | Transposition table size in MB (1-512) |
 | `EvalFile` | string | `<embedded>` | Load a different NNUE net at runtime |
+| `SyzygyPath` | string | `<empty>` | Colon-separated paths to Syzygy tablebase files |
 
 It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
 
@@ -88,6 +89,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Continuation history (1-ply + 2-ply) for quiet move ordering
 * Capture history for capture move ordering
 * History malus for quiet/capture moves tried before beta cutoffs
+* Syzygy endgame tablebases (root DTZ probe, in-search WDL probe via pyrrhic-rs)
 
 ### Evaluation
 

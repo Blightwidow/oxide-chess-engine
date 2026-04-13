@@ -45,6 +45,9 @@ Sets the transposition table size in MB (1-512). Default: 16 MB.
 ### `setoption name EvalFile value <path>`
 Loads a NNUE network from a file path, replacing the embedded default. Useful for SPRT testing candidate nets without recompiling. If the file cannot be loaded, the current net is kept.
 
+### `setoption name SyzygyPath value <path>`
+Sets the path to Syzygy endgame tablebases. Accepts a colon-separated list of directories (e.g. `./syzygy/345:./syzygy/6`). When loaded, the engine probes DTZ tables at the root for optimal move selection and WDL tables during search for exact endgame scores. Only probes positions with piece count within the loaded tables' range and no castling rights. Set to `<empty>` to disable.
+
 ### `bench [hash_size] [threads] [depth]`
 Runs the benchmark suite (46 positions). Default depth: 13. Reports total nodes, time, and nodes/second.
 
