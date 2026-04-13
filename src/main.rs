@@ -10,6 +10,7 @@ mod movegen;
 mod nnue;
 mod position;
 mod search;
+mod tablebase;
 mod time;
 mod uci;
 
@@ -27,6 +28,7 @@ fn main() {
     println!("Oxid' v1.3.0 by Theo Dammaretz");
 
     let bitboards = Rc::new(Bitboards::new());
+    tablebase::init_attack_tables(&bitboards);
     let hasher = Rc::new(Hasher::new());
     let movegen = Movegen::new(Rc::clone(&bitboards));
     let position = Position::new(Rc::clone(&bitboards), Rc::clone(&hasher));

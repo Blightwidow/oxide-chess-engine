@@ -121,6 +121,17 @@ The search maintains a triangular PV table to track the principal variation acro
 - **UCI output**: full multi-move PV printed in info lines; mate scores formatted as `score mate N`
 - **Ponder**: extracted from PV[1] (no TT probe needed)
 
+## Syzygy Endgame Tablebases
+
+When Syzygy tablebases are loaded (via `SyzygyPath` UCI option), the engine probes them at two levels:
+
+- **Root DTZ probe**: before iterative deepening, probe Distance-To-Zero tables for the root position. If successful, returns the optimal move immediately without searching (the DTZ-optimal move preserves the best WDL outcome with shortest distance to a zeroing move).
+- **In-search WDL probe**: at non-root nodes in `alpha_beta()`, after repetition/50-move/insufficient material checks but before TT probe. Returns exact Win/Draw/Loss score. Results are cached in the TT at maximum depth to avoid repeated disk probes.
+
+**Guards**: only probes when total piece count is within loaded table range and no castling rights remain (Syzygy tables assume no castling). The `CursedWin` and `BlessedLoss` results (50-move rule interactions) are mapped to `VALUE_DRAW`.
+
+**Score conversion**: TB wins use `VALUE_TB_WIN - ply` (31871 - ply), TB losses use `VALUE_TB_LOSS + ply` (-31871 + ply). These scores are below `VALUE_MATE` range so actual checkmates always outrank TB wins.
+
 ## Constants
 
 | Constant | Value |
@@ -129,3 +140,5 @@ The search maintains a triangular PV table to track the principal variation acro
 | VALUE_MATE | 32000 |
 | VALUE_INFINITE | 32001 |
 | VALUE_DRAW | 0 |
+| VALUE_TB_WIN | 31871 |
+| VALUE_TB_LOSS | -31871 |

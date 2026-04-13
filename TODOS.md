@@ -36,20 +36,19 @@
   - Exponential widening needs rework: re-searching all root moves on fail is too expensive
   - Consider PVS-style approach: only re-search the failing move with wider window
 
-## Phase D (~+15 Elo cumulative)
+## Phase D (~+15 Elo cumulative) ✓
 
-- [ ] **Time management improvements** (+10-15 Elo) — `src/time.rs`
+- [x] **Time management improvements** (+10-15 Elo) — shipped in #5
   - Node TM: stop early if best move has >90% root nodes, extend if <50%
   - Score stability: extend on score drops between iterations
   - Eval complexity: use root move score spread to estimate difficulty
 
 ## Phase E — Big features (~+80-130 Elo)
 
-- [ ] **Self-play datagen pipeline** — new binary/command
-  - `datagen` mode: self-play games → `.binpack` output
-  - Params: num_games, depth (7-9), threads, random opening plies
-  - Record (board, score, game_result) per position
-  - Compatible with bullet sfbinpack loader in `training/src/main.rs`
+- [x] **Self-play datagen pipeline** — shipped in #7
+  - `datagen` UCI command: self-play games → plain text → `.binpack`
+  - Params: depth, num_games, output_path, 8 random opening plies
+  - Record (FEN, move, score, ply, WDL) per position
 
 - [ ] **Improved NNUE architecture** (+30-80 Elo) — `src/nnue/`, `training/`
   - Increase HIDDEN_SIZE to 384 or 512
@@ -57,11 +56,11 @@
   - Train on 200M+ self-play positions
   - Consider output buckets (material-based eval head selection)
 
-- [ ] **End-game base tables / EGTB** (+10-15 Elo) — new module, `src/search.rs`
-  - FFI to Fathom C library or pure-Rust Syzygy implementation
+- [x] **End-game base tables / EGTB** (+10-15 Elo) — `src/tablebase.rs`, `src/search.rs`
+  - pyrrhic-rs (pure Rust Syzygy wrapper)
   - Root probe for DTZ (best winning move)
   - In-search WDL probe for score adjustment
-  - Add `SyzygyPath` UCI option
+  - `SyzygyPath` UCI option
 
 - [ ] **Opening book support** — `src/uci.rs`, new module
   - Parse Polyglot `.bin` format

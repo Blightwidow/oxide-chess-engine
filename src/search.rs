@@ -20,6 +20,7 @@ use crate::{
     },
     nnue::{self, NnueEval},
     position::Position,
+    tablebase::{self, Tablebase},
     time::TimeManager,
 };
 
@@ -126,6 +127,8 @@ pub struct Search {
     ply_piece_type: [usize; MAX_PLY],
     /// Destination square of move made at each ply (for continuation history lookups)
     ply_to_square: [usize; MAX_PLY],
+    /// Syzygy tablebase handle (None until SyzygyPath is set)
+    pub tablebase: Option<Tablebase>,
 }
 
 impl Search {
@@ -163,6 +166,7 @@ impl Search {
             capture_history: Box::new([[[0i32; 7]; 64]; 7]),
             ply_piece_type: [PieceType::NONE; MAX_PLY],
             ply_to_square: [0; MAX_PLY],
+            tablebase: None,
         };
         search.position.set(FEN_START_POSITION.to_string());
         search.nnue.refresh(&search.position);
@@ -251,6 +255,29 @@ impl Search {
             self.nnue.refresh(&self.position);
         } else {
             println!("info string Failed to load NNUE net: {}", path);
+        }
+    }
+
+    /// Load or replace Syzygy tablebases from a colon-separated path.
+    pub fn init_tablebase(&mut self, path: &str) {
+        if path.is_empty() || path == "<empty>" {
+            self.tablebase = None;
+            println!("info string Syzygy tablebases disabled");
+            return;
+        }
+        // Drop existing instance first (pyrrhic-rs enforces singleton)
+        self.tablebase = None;
+        match Tablebase::new(path) {
+            Ok(tablebase) => {
+                println!(
+                    "info string Syzygy tablebases loaded (up to {} pieces)",
+                    tablebase.max_pieces()
+                );
+                self.tablebase = Some(tablebase);
+            }
+            Err(error) => {
+                println!("info string Failed to load Syzygy tablebases: {}", error);
+            }
         }
     }
 
@@ -446,6 +473,17 @@ impl Search {
 
         if moves.is_empty() {
             return None;
+        }
+
+        // Root tablebase probe: if the position is in TB range, use DTZ to pick the best move
+        if let Some(ref tablebase) = self.tablebase {
+            if let Some((tb_move, wdl)) = tablebase.probe_root(&self.position) {
+                let tb_score = tablebase::wdl_to_score(wdl, 0);
+                if !self.silent {
+                    println!("info depth 1 score cp {} string TB root hit ({:?})", tb_score, wdl);
+                }
+                return Some((tb_move, tb_score));
+            }
         }
 
         let mut move_scores: ArrayVec<(Move, Option<i16>), 256> = ArrayVec::new();
@@ -733,6 +771,27 @@ impl Search {
                 let bb_sq = bits::lsb(self.position.by_type_bb[Sides::BLACK][PieceType::BISHOP]);
                 if (file_of(wb_sq) + rank_of(wb_sq)) % 2 == (file_of(bb_sq) + rank_of(bb_sq)) % 2 {
                     return Some(VALUE_DRAW);
+                }
+            }
+        }
+
+        // Syzygy WDL probe (non-root nodes only)
+        if ply > 0 {
+            if let Some(ref tablebase) = self.tablebase {
+                if let Some(wdl) = tablebase.probe_wdl(&self.position) {
+                    let tb_score = tablebase::wdl_to_score(wdl, ply);
+                    // Store in TT at maximum depth so future lookups skip the probe
+                    let zobrist_for_tb = self.position.zobrist;
+                    self.eval.transposition_table.store(
+                        zobrist_for_tb,
+                        HashData {
+                            depth: u8::MAX,
+                            value: tablebase::adjust_tb_score_to_tt(tb_score, ply),
+                            best_move: Move::none(),
+                            node_type: NodeType::Exact,
+                        },
+                    );
+                    return Some(tb_score);
                 }
             }
         }
