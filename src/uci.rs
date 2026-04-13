@@ -36,6 +36,7 @@ impl Uci {
                 println!("option name Hash type spin default 16 min 1 max 512");
                 println!("option name EvalFile type string default <embedded>");
                 println!("option name SyzygyPath type string default <empty>");
+                println!("option name BookFile type string default <empty>");
                 println!("uciok");
             } else if token == "xboard" {
                 println!("This engine does not support the xboard protocol.");
@@ -207,6 +208,8 @@ impl Uci {
                         search.load_nnue(value);
                     } else if selected_option == "SyzygyPath" {
                         search.init_tablebase(value);
+                    } else if selected_option == "BookFile" {
+                        search.book = crate::book::OpeningBook::load(value);
                     }
                 }
                 _ => (),

@@ -62,8 +62,10 @@
   - In-search WDL probe for score adjustment
   - `SyzygyPath` UCI option
 
-- [ ] **Opening book support** — `src/uci.rs`, new module
-  - Parse Polyglot `.bin` format
+- [x] **Opening book support** — `src/book.rs`, `src/uci.rs`
+  - Parse Polyglot `.bin` format (binary search, big-endian, 16-byte entries)
+  - Separate Polyglot Zobrist hash (781-key table, EP filtering)
+  - Weighted random move selection with legal move validation
   - Add `OwnBook` and `BookFile` UCI options
   - Fall through to engine search when out of book
 

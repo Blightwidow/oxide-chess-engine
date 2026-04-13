@@ -129,6 +129,8 @@ pub struct Search {
     ply_to_square: [usize; MAX_PLY],
     /// Syzygy tablebase handle (None until SyzygyPath is set)
     pub tablebase: Option<Tablebase>,
+    /// Polyglot opening book (loaded via UCI `BookFile` option)
+    pub book: Option<crate::book::OpeningBook>,
 }
 
 impl Search {
@@ -167,6 +169,7 @@ impl Search {
             ply_piece_type: [PieceType::NONE; MAX_PLY],
             ply_to_square: [0; MAX_PLY],
             tablebase: None,
+            book: None,
         };
         search.position.set(FEN_START_POSITION.to_string());
         search.nnue.refresh(&search.position);
@@ -181,6 +184,15 @@ impl Search {
             let nodes = self.perft(limits.perft, true);
             println!("\nNodes searched: {}\n", nodes);
             return;
+        }
+
+        // Probe opening book before searching
+        if let Some(ref book) = self.book {
+            if let Some(book_move) = book.probe(&self.position, &self.movegen) {
+                println!("info string book move");
+                println!("bestmove {:?}", book_move);
+                return;
+            }
         }
 
         let result = self.run_and_return(limits);

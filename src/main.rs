@@ -1,5 +1,6 @@
 mod benchmark;
 mod bitboards;
+mod book;
 mod datagen;
 mod defs;
 mod eret;
