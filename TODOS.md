@@ -19,26 +19,24 @@
   - Copy child PV on alpha improvement
   - Print full PV in UCI info output
 
-## Phase C (~+15 Elo cumulative) — In Progress
+## Phase C (~+10 Elo realized) ✓
 
 - [x] **SIMD for NNUE** (+5-10 Elo via NPS) — `src/nnue/`
   - NEON (aarch64) + AVX2 (x86_64) for accumulator ops and SCReLU forward pass
   - Aligned `Accumulator` struct, scalar fallback for other architectures
 
-- [ ] **Singular extension tuning** (+5-10 Elo) — `src/search.rs`
-  - ~~Lower SE threshold: `depth >= 8` (from 10)~~ (already done)
-  - Double extensions when very singular (`s < se_beta - depth*2`) — SPRT failed at -8 Elo, needs revisiting
-  - Negative extensions on SE fail-high — likely too aggressive, caused regression
-  - Cap total extensions
+- ~~**Singular extension tuning**~~ — canceled
+  - Double extensions: SPRT failed at -8 Elo
+  - Negative extensions: caused regression
+  - May revisit with different approach later
 
-- [ ] **Aspiration window tuning** (+2-5 Elo) — `src/search.rs`
-  - Smaller initial window (±12-15cp) — SPRT failed badly (-76 Elo, massive timeouts)
-  - Exponential widening needs rework: re-searching all root moves on fail is too expensive
-  - Consider PVS-style approach: only re-search the failing move with wider window
+- ~~**Aspiration window tuning**~~ — canceled
+  - SPRT failed badly (-76 Elo, massive timeouts)
+  - Re-searching all root moves on fail too expensive
 
 ## Phase D (~+15 Elo cumulative) ✓
 
-- [x] **Time management improvements** (+10-15 Elo) — shipped in #5
+- [x] **Time management improvements** (+10-15 Elo) — `src/time.rs`, shipped in #5
   - Node TM: stop early if best move has >90% root nodes, extend if <50%
   - Score stability: extend on score drops between iterations
   - Eval complexity: use root move score spread to estimate difficulty
@@ -49,6 +47,7 @@
   - `datagen` UCI command: self-play games → plain text → `.binpack`
   - Params: depth, num_games, output_path, 8 random opening plies
   - Record (FEN, move, score, ply, WDL) per position
+  - Compatible with bullet sfbinpack loader in `training/src/main.rs`
 
 - [ ] **Improved NNUE architecture** (+30-80 Elo) — `src/nnue/`, `training/`
   - Increase HIDDEN_SIZE to 384 or 512

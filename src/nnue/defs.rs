@@ -7,7 +7,7 @@ pub const NUM_BUCKETS: usize = 8;
 /// Total feature transformer input size: buckets × features per bucket
 pub const BUCKET_FEATURE_SIZE: usize = NUM_BUCKETS * FEATURE_SIZE;
 /// Hidden layer size of the feature transformer accumulator
-pub const HIDDEN_SIZE: usize = 256;
+pub const HIDDEN_SIZE: usize = 384;
 /// Second hidden layer size
 pub const L1_SIZE: usize = 32;
 /// Quantization factor for accumulator clipped ReLU
@@ -17,7 +17,7 @@ pub const QB: i32 = 64;
 /// Scale factor to convert network output to centipawns
 pub const SCALE: i32 = 400;
 /// Network file format version
-pub const NET_VERSION: u32 = 2;
+pub const NET_VERSION: u32 = 3;
 /// Magic bytes for the .nnue file header
 pub const NET_MAGIC: [u8; 4] = *b"OXNN";
 

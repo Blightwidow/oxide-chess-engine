@@ -43,54 +43,23 @@ When merging binpacks from multiple generation runs, filenames may collide. Use 
 ./training/rename_binpacks.sh
 ```
 
-## Training (Rust — CPU only)
+## Training (Rust/bullet — CPU)
 
-Add binpacks in data then run the following command
-
-```bash
-# I am runing cpu feature as I am using an apple-silicon Macbook for now
-cargo run --release --features cpu --no-default-features --bin train
-```
-
-Then once you are happy, convert a checkpoint using
-
-```bash
-cargo run --release --bin convert <quantised.bin> ./nets/default.nnue
-```
-
-## Training (PyTorch — MPS/CUDA/CPU)
-
-Faster training using GPU acceleration. Requires Python 3.11-3.13.
-
-### Step 1: Preprocess binpacks
-
-Convert .binpack files to a flat binary format Python can read efficiently:
+Place binpacks in `training/data/`, then:
 
 ```bash
 cd training
-cargo run --release --features cpu --no-default-features --bin preprocess
-# Outputs: data/preprocessed.bin
-# Optional: preprocess validation data separately
-cargo run --release --features cpu --no-default-features --bin preprocess data/validation/preprocessed.bin
+cargo run --release --features cpu --no-default-features --bin train
 ```
 
-### Step 2: Train
+Architecture: `768×8 → 384 (SCReLU) → concat perspectives (768) → 32 (SCReLU) → 1`
+
+Checkpoints are saved every 10 superbatches in `training/checkpoints/`.
+
+### Convert checkpoint to .nnue
 
 ```bash
-cd training/pytorch
-uv run python train.py ../data/preprocessed.bin --validation ../data/validation/preprocessed.bin
-```
-
-Options:
-- `--superbatches N` — total superbatches (default 60)
-- `--save-rate N` — checkpoint interval (default 10)
-- `--resume checkpoints/oxid-30` — resume from checkpoint
-
-### Step 3: Export
-
-```bash
-cd training/pytorch
-uv run python export.py checkpoints/oxid-60/model.pt ../../nets/default.nnue
+cargo run --release --bin convert -- checkpoints/oxid-60/quantised.bin ../nets/oxide-384-sb60.nnue
 ```
 
 ## SPRT Testing
@@ -99,13 +68,16 @@ After training a new net, run an SPRT test to verify it doesn't regress (or meas
 
 ```bash
 cargo build -r
+./scripts/sprt_all_nets.sh
+```
 
+Or manually:
+
+```bash
 ./bin/fastchess \
-  -engine cmd=./target/release/chessbot name=new_net "option.EvalFile=nets/new.nnue" \
-  -engine cmd=./target/release/chessbot name=base_net "option.EvalFile=nets/default.nnue" \
+  -engine cmd=./target/release/oxid name=new_net "option.EvalFile=nets/new.nnue" \
+  -engine cmd=./target/release/oxid name=base_net \
   -openings file=./data/openings.pgn format=pgn order=random \
   -each tc=8+0.08 -rounds 15000 -repeat -concurrency 6 -recover \
   -sprt elo0=0 elo1=5 alpha=0.05 beta=0.05
 ```
-
-Both engines use the same binary — only the `EvalFile` UCI option differs.

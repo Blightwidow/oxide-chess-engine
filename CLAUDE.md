@@ -44,7 +44,7 @@ Detailed docs live in `docs/`. Keep them in sync when making changes:
 
 - `docs/architecture.md` — Module overview, component wiring, core types, move encoding
 - `docs/search.md` — Search algorithm, pruning, reductions, extensions, move ordering
-- `docs/evaluation.md` — Tapered eval, material values, piece-square tables
+- `docs/evaluation.md` — NNUE architecture, handcrafted eval fallback
 - `docs/uci.md` — Supported UCI commands and options
 - `docs/time.md` — Time allocation, soft/hard limits, adaptive scaling signals
 
@@ -118,6 +118,37 @@ clang++ -O2 -std=c++20 -o tools/plain2binpack tools/plain2binpack.cpp
 ```
 
 Output format: `FEN;UCI_MOVE;SCORE;PLY;WDL` (semicolon-delimited, one position per line). Games use 8 random opening plies, win adjudication (5 consecutive |score| >= 3000cp), draw adjudication (10 consecutive |score| <= 5cp), and 400-ply max.
+
+## NNUE Training (Rust/bullet)
+
+Training uses [bullet](https://github.com/jw1912/bullet) (Rust NNUE trainer by jw1912). Place `.binpack` files in `training/data/`, then:
+
+```bash
+cd training
+cargo run --release --features cpu --no-default-features --bin train
+```
+
+Resume from checkpoint or train longer:
+
+```bash
+cargo run --release --features cpu --no-default-features --bin train -- --resume checkpoints/oxid-60 --end 100
+```
+
+Convert checkpoint to `.nnue`:
+
+```bash
+cargo run --release --bin convert -- checkpoints/oxid-100/quantised.bin ../nets/oxide-384-sb100.nnue
+```
+
+Batch-convert all checkpoints:
+
+```bash
+./scripts/convert_checkpoints.sh
+```
+
+Architecture: `768×8 → 384 (SCReLU) → concat perspectives (768) → 32 (SCReLU) → 1`
+
+> **Note (2026-04):** A PyTorch-based trainer was attempted but abandoned — all nets trained with it were consistently 300+ Elo weaker than bullet-trained equivalents despite identical architecture and quantization. Root cause was training quality (LR schedule, loss convergence) rather than any code bug. Bullet remains the only supported trainer.
 
 ## Development Notes
 

@@ -93,7 +93,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 
 ### Evaluation
 
-* NNUE evaluation (8-bucket king-bucketed 768->256x2->32->1 SCReLU architecture, integer quantized)
+* NNUE evaluation (8-bucket king-bucketed 768->384x2->32->1 SCReLU architecture, integer quantized)
 * King bucketing with horizontal mirroring (8 buckets by rank, files e-h mirrored to a-d)
 * Incremental accumulator updates with per-perspective bucket-change refresh
 * Optimized forward pass: pre-computed SCReLU activations, transposed L1 weights
@@ -113,7 +113,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 
 * [Architecture](docs/architecture.md) — Module overview, component wiring, core types
 * [Search](docs/search.md) — All search techniques, pruning, reductions, move ordering
-* [Evaluation](docs/evaluation.md) — Tapered eval, material values, piece-square tables
+* [Evaluation](docs/evaluation.md) — NNUE architecture, handcrafted eval fallback
 * [UCI Protocol](docs/uci.md) — Supported commands and options
 
 ## Acknowledgements
