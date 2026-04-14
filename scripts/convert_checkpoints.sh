@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Convert all PyTorch training checkpoints into .nnue files with hash names.
+# Convert all bullet training checkpoints into .nnue files with hash names.
 # Expects to be run from the repo root.
-# Skips checkpoints whose output net already exists in nets/ (hash of model.pt).
+# Skips checkpoints whose output net already exists in nets/ (hash of quantised.bin).
 
 set -euo pipefail
 
@@ -15,13 +15,19 @@ fi
 
 mkdir -p "$NETS_DIR"
 
+# Build the convert binary if needed
+if [ ! -f "training/target/release/convert" ]; then
+    echo "Building convert binary..."
+    (cd training && cargo build --release --bin convert)
+fi
+
 converted=0
 skipped=0
 
-for model_pt in "$CHECKPOINTS_DIR"/*/model.pt; do
-    [ -f "$model_pt" ] || continue
+for quantised_bin in "$CHECKPOINTS_DIR"/*/quantised.bin; do
+    [ -f "$quantised_bin" ] || continue
 
-    hash=$(shasum -a 256 "$model_pt" | cut -c1-12)
+    hash=$(shasum -a 256 "$quantised_bin" | cut -c1-12)
     output="$NETS_DIR/nn-${hash}.nnue"
 
     if [ -f "$output" ]; then
@@ -29,8 +35,8 @@ for model_pt in "$CHECKPOINTS_DIR"/*/model.pt; do
         continue
     fi
 
-    echo "Converting $(basename "$(dirname "$model_pt")")..."
-    (cd training && uv run python export.py "../$model_pt" "../$output")
+    echo "Converting $(basename "$(dirname "$quantised_bin")")..."
+    training/target/release/convert "$quantised_bin" "$output"
     echo "  -> $output"
 
     converted=$((converted + 1))

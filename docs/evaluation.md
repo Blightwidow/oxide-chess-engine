@@ -105,9 +105,9 @@ Return score from perspective of side to move
 
 The final score is clamped to `[-VALUE_INFINITE, VALUE_INFINITE]`.
 
-## NNUE Evaluation (Optional)
+## NNUE Evaluation
 
-The engine supports an optional NNUE (Efficiently Updatable Neural Network) evaluation that replaces the handcrafted eval when a trained network file is available.
+The engine uses NNUE (Efficiently Updatable Neural Network) evaluation as its primary eval. The handcrafted eval above serves as a fallback when no network file is available.
 
 ### Architecture
 
@@ -134,6 +134,12 @@ Binary `.nnue` file with header:
 - Weights and biases as i16 little-endian
 
 Configurable via `setoption name EvalFile value <path>`. The default net is embedded at compile time via `include_bytes!`.
+
+### Training
+
+Nets are trained using [bullet](https://github.com/jw1912/bullet) (Rust NNUE trainer, CPU/CUDA/HIP). See `training/README.md` for full instructions.
+
+> **Note (2026-04):** A PyTorch-based trainer was attempted but abandoned — all nets were consistently 300+ Elo weaker than bullet-trained equivalents despite identical architecture. Root cause was training quality (LR schedule convergence), not a code bug.
 
 ### Fallback
 

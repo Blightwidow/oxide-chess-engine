@@ -113,7 +113,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 
 * [Architecture](docs/architecture.md) — Module overview, component wiring, core types
 * [Search](docs/search.md) — All search techniques, pruning, reductions, move ordering
-* [Evaluation](docs/evaluation.md) — Tapered eval, material values, piece-square tables
+* [Evaluation](docs/evaluation.md) — NNUE architecture, handcrafted eval fallback
 * [UCI Protocol](docs/uci.md) — Supported commands and options
 
 ## Acknowledgements
