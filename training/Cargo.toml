@@ -16,9 +16,10 @@ name = "preprocess"
 path = "src/bin/preprocess.rs"
 
 [features]
-default = ["cpu"]
-cpu = ["bullet/cpu"]
+default = ["metal"]
+metal = ["bullet/metal"]
 cuda = ["bullet/cuda"]
+rocm = ["bullet/rocm"]
 
 [dependencies]
-bullet = { git = "https://github.com/jw1912/bullet", package = "bullet_lib", default-features = false }
+bullet = { git = "https://github.com/Blightwidow/bullet-metal", package = "bullet_lib", default-features = false }
