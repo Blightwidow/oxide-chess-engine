@@ -149,6 +149,8 @@ Batch-convert all checkpoints:
 Architecture: `768×8 → 384 (SCReLU) → concat perspectives (768) → 32 (SCReLU) → 1`
 
 > **Note (2026-04):** A PyTorch-based trainer was attempted but abandoned — all nets trained with it were consistently 300+ Elo weaker than bullet-trained equivalents despite identical architecture and quantization. Root cause was training quality (LR schedule, loss convergence) rather than any code bug. Bullet remains the only supported trainer.
+>
+> **Note (2026-04-23):** Metal GPU backend (`Blightwidow/bullet-metal` fork) was attempted to speed up training on M2 Pro. Training ran (~5min/superbatch vs ~5min/sb CPU — no speedup) but produced weaker nets (-25 to -105 Elo vs CPU baseline). Determinism test with fixed seed confirmed the backend is **non-deterministic** (two runs with same seed produce different weights at byte 6145 of `quantised.bin`), likely from atomic reductions in backward pass. Gradient noise from the backend swamps training signal. Bullet is pinned to `feab6443` (CPU) until a deterministic GPU path exists (CUDA works; upstream dropped CPU in newer revisions).
 
 ## Development Notes
 

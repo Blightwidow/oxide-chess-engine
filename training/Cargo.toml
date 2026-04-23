@@ -21,4 +21,4 @@ cpu = ["bullet/cpu"]
 cuda = ["bullet/cuda"]
 
 [dependencies]
-bullet = { git = "https://github.com/jw1912/bullet", package = "bullet_lib", default-features = false }
+bullet = { git = "https://github.com/jw1912/bullet", rev = "feab6443", package = "bullet_lib", default-features = false }
