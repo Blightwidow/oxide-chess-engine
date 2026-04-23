@@ -1,7 +1,7 @@
 //! Preprocessor: reads .binpack files via bullet, applies filters, and writes
 //! a flat binary file of ChessBoard structs (32 bytes each) that Python can mmap.
 //!
-//! Usage: cargo run --release --bin preprocess [output_path]
+//! Usage: cargo run --release --features cpu --no-default-features --bin preprocess [output_path]
 //!
 //! Reads all .binpack files from data/ and writes filtered positions to the output file.
 //! Default output: data/preprocessed.bin
@@ -50,8 +50,8 @@ fn main() {
     let mut writer = BufWriter::with_capacity(64 * 1024 * 1024, file);
     let mut total_positions = 0u64;
 
-    // map_chunks iterates over variable-size chunks from loader
-    loader.map_chunks(0, |batch| {
+    // Use a large batch size to reduce overhead
+    loader.map_batches(0, 65536, |batch| {
         for board in batch {
             let bytes: &[u8] =
                 unsafe { std::slice::from_raw_parts(board as *const _ as *const u8, 32) };
