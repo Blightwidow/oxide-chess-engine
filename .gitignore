@@ -40,3 +40,6 @@ autoresearch/
 tools/plain2binpack
 data/*.txt
 data/*.binpack
+
+# wasm build output
+pkg/

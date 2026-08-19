@@ -2,7 +2,7 @@ pub mod defs;
 mod move_picker;
 mod tests;
 
-use std::time;
+use crate::clock;
 
 use arrayvec::ArrayVec;
 
@@ -20,9 +20,11 @@ use crate::{
     },
     nnue::{self, NnueEval},
     position::Position,
-    tablebase::{self, Tablebase},
     time::TimeManager,
 };
+
+#[cfg(feature = "tablebase")]
+use crate::tablebase::{self, Tablebase};
 
 use self::move_picker::{MovePicker, QMovePicker};
 
@@ -97,7 +99,7 @@ pub struct Search {
     pub silent: bool,
     seldepth: usize,
     time: TimeManager,
-    start_time: time::Instant,
+    start_time: clock::Instant,
     /// Two killer moves per ply — quiet moves that caused beta cutoffs
     killers: [[Move; 2]; MAX_PLY],
     /// History heuristic table [from_sq][to_sq] — accumulated depth² bonus for quiet beta cutoffs
@@ -128,6 +130,7 @@ pub struct Search {
     /// Destination square of move made at each ply (for continuation history lookups)
     ply_to_square: [usize; MAX_PLY],
     /// Syzygy tablebase handle (None until SyzygyPath is set)
+    #[cfg(feature = "tablebase")]
     pub tablebase: Option<Tablebase>,
     /// Polyglot opening book (loaded via UCI `BookFile` option)
     pub book: Option<crate::book::OpeningBook>,
@@ -153,7 +156,7 @@ impl Search {
             eval,
             nnue,
             time: TimeManager::default(),
-            start_time: time::Instant::now(),
+            start_time: clock::Instant::now(),
             killers: [[Move::none(); 2]; MAX_PLY],
             history: [[0; 64]; 64],
             lmr_table,
@@ -168,6 +171,7 @@ impl Search {
             capture_history: Box::new([[[0i32; 7]; 64]; 7]),
             ply_piece_type: [PieceType::NONE; MAX_PLY],
             ply_to_square: [0; MAX_PLY],
+            #[cfg(feature = "tablebase")]
             tablebase: None,
             book: None,
         };
@@ -180,7 +184,7 @@ impl Search {
     /// Entry point: reset state, run iterative deepening, and print bestmove.
     pub fn run(&mut self, limits: SearchLimits) {
         if limits.perft > 0 {
-            self.start_time = time::Instant::now();
+            self.start_time = clock::Instant::now();
             let nodes = self.perft(limits.perft, true);
             println!("\nNodes searched: {}\n", nodes);
             return;
@@ -225,7 +229,7 @@ impl Search {
 
     /// Run search and return best move + score without printing bestmove line.
     pub fn run_and_return(&mut self, limits: SearchLimits) -> Option<(Move, i16)> {
-        self.start_time = time::Instant::now();
+        self.start_time = clock::Instant::now();
 
         // Reset per-search state
         self.nodes_searched = 0;
@@ -271,6 +275,7 @@ impl Search {
     }
 
     /// Load or replace Syzygy tablebases from a colon-separated path.
+    #[cfg(feature = "tablebase")]
     pub fn init_tablebase(&mut self, path: &str) {
         if path.is_empty() || path == "<empty>" {
             self.tablebase = None;
@@ -291,6 +296,12 @@ impl Search {
                 println!("info string Failed to load Syzygy tablebases: {}", error);
             }
         }
+    }
+
+    /// Stub for builds without the `tablebase` feature (e.g. wasm32).
+    #[cfg(not(feature = "tablebase"))]
+    pub fn init_tablebase(&mut self, _path: &str) {
+        println!("info string Syzygy tablebases unavailable: built without the `tablebase` feature");
     }
 
     // ─── NNUE-Aware Move Wrappers ─────────────────────────────────────────────
@@ -488,6 +499,7 @@ impl Search {
         }
 
         // Root tablebase probe: if the position is in TB range, use DTZ to pick the best move
+        #[cfg(feature = "tablebase")]
         if let Some(ref tablebase) = self.tablebase {
             if let Some((tb_move, wdl)) = tablebase.probe_root(&self.position) {
                 let tb_score = tablebase::wdl_to_score(wdl, 0);
@@ -788,6 +800,7 @@ impl Search {
         }
 
         // Syzygy WDL probe (non-root nodes only)
+        #[cfg(feature = "tablebase")]
         if ply > 0 {
             if let Some(ref tablebase) = self.tablebase {
                 if let Some(wdl) = tablebase.probe_wdl(&self.position) {

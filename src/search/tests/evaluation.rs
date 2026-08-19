@@ -36,7 +36,7 @@ fn repetition_detected_as_draw() {
         search.position.side_to_move,
         search.position.states.last().unwrap().game_ply,
     );
-    search.start_time = std::time::Instant::now();
+    search.start_time = crate::clock::Instant::now();
 
     let result = search.search(4);
     // The engine should NOT play into the same repeated line if it's worth 0

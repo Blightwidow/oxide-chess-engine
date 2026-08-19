@@ -4,7 +4,7 @@ use crate::position::Position;
 use crate::search::defs::SearchLimits;
 use crate::search::Search;
 
-use std::time;
+use crate::clock;
 
 struct ParsedEpd {
     fen: String,
@@ -289,7 +289,7 @@ pub fn run_eret(search: &mut Search, limit: EretLimit) {
     let mut total_nodes: usize = 0;
     let mut solved = 0;
     let total = positions.len();
-    let elapsed = time::Instant::now();
+    let elapsed = clock::Instant::now();
 
     for position in &positions {
         search.eval.transposition_table.clear();
@@ -347,7 +347,7 @@ pub fn run_eret(search: &mut Search, limit: EretLimit) {
         );
     }
 
-    let duration = time::Instant::now() - elapsed + time::Duration::from_millis(1);
+    let duration = clock::Instant::now() - elapsed + clock::Duration::from_millis(1);
 
     println!("\n===========================");
     println!("ERET Score    : {}/{}", solved, total);

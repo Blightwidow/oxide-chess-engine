@@ -10,6 +10,7 @@ RUSTFLAGS="" cargo build -r                             # Release build (generic
 cargo run -r -- <command>                               # Run directly (e.g. `cargo run -r -- bench`)
 cargo test                                              # Run tests
 cargo clippy                                            # Lint
+./scripts/build_wasm.sh                                 # Browser build (see docs/wasm.md)
 ```
 
 ### Quick Performance Check
@@ -47,6 +48,7 @@ Detailed docs live in `docs/`. Keep them in sync when making changes:
 - `docs/evaluation.md` — NNUE architecture, handcrafted eval fallback
 - `docs/uci.md` — Supported UCI commands and options
 - `docs/time.md` — Time allocation, soft/hard limits, adaptive scaling signals
+- `docs/wasm.md` — WebAssembly build, feature gating (`host`/`tablebase`/`wasm`), JS API
 
 When adding or changing a search technique, evaluation term, or UCI command, update the corresponding doc file and the feature list in `README.md`.
 

@@ -204,8 +204,8 @@ pub fn polyglot_hash(position: &Position) -> u64 {
 
 /// Simple seed from system time for weighted random selection.
 fn xorshift_seed() -> u32 {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let nanos = crate::clock::SystemTime::now()
+        .duration_since(crate::clock::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
     // Mix the bits a little

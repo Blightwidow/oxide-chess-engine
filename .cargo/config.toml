@@ -1,2 +1,9 @@
+# target-cpu=native is the right default for the native engine build, but it is
+# meaningless (and rejected) for wasm. A [target.*] table overrides [build] for
+# that target rather than merging with it, so the wasm entry below replaces the
+# native flag entirely.
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

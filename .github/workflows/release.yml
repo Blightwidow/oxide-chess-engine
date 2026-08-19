@@ -52,14 +52,14 @@ jobs:
       - name: Package (unix)
         if: runner.os != 'Windows'
         run: |
-          cp target/${{ matrix.target }}/release/oxide ${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/oxid ${{ matrix.name }}
           chmod +x ${{ matrix.name }}
           tar czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
 
       - name: Package (windows)
         if: runner.os == 'Windows'
         run: |
-          cp target/${{ matrix.target }}/release/oxide.exe ${{ matrix.name }}.exe
+          cp target/${{ matrix.target }}/release/oxid.exe ${{ matrix.name }}.exe
           7z a ${{ matrix.name }}.zip ${{ matrix.name }}.exe
 
       - name: Upload artifact
@@ -68,8 +68,55 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}.*
 
+
+  wasm:
+    name: oxide-wasm
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Resolve wasm-bindgen version
+        id: bindgen
+        run: |
+          version=$(sed -n '/^name = "wasm-bindgen"$/,/^version = /s/^version = "\(.*\)"/\1/p' Cargo.lock | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache wasm-bindgen-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-${{ steps.bindgen.outputs.version }}
+
+      - name: Install wasm-bindgen-cli
+        run: |
+          if ! command -v wasm-bindgen >/dev/null; then
+            cargo install wasm-bindgen-cli --version ${{ steps.bindgen.outputs.version }} --locked
+          fi
+
+      # No RUSTFLAGS override here: .cargo/config.toml's
+      # [target.wasm32-unknown-unknown] entry supplies -C target-feature=+simd128
+      # and an env RUSTFLAGS would replace it wholesale.
+      - name: Build wasm package
+        run: ./scripts/build_wasm.sh
+
+      - name: Smoke test in Node
+        run: node wasm/harness.mjs
+
+      - name: Package
+        run: tar czf oxide-wasm.tar.gz -C pkg .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oxide-wasm
+          path: oxide-wasm.tar.gz
+
   release:
-    needs: build
+    needs: [build, wasm]
     runs-on: ubuntu-latest
 
     steps:

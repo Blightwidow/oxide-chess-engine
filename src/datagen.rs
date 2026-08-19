@@ -1,6 +1,6 @@
+use crate::clock;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
-use std::time;
 
 use crate::defs::*;
 use crate::search::defs::{SearchLimits, FEN_START_POSITION};
@@ -230,8 +230,8 @@ pub(crate) fn is_repetition(position: &crate::position::Position) -> bool {
 
 pub fn run_datagen(search: &mut Search, config: DatagenConfig) {
     let mut rng = Rng::new(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        clock::SystemTime::now()
+            .duration_since(clock::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64,
     );
@@ -250,7 +250,7 @@ pub fn run_datagen(search: &mut Search, config: DatagenConfig) {
 
     search.silent = true;
     let mut total_positions: usize = 0;
-    let start = time::Instant::now();
+    let start = clock::Instant::now();
 
     for game_index in 0..config.num_games {
         let (entries, result) = play_game(search, config.depth, &mut rng);
