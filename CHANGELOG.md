@@ -37,6 +37,7 @@ All notable changes to Oxid' are documented in this file.
 
 - Syzygy endgame tablebase probing via `pyrrhic-rs`: root DTZ probe for move selection, in-search WDL probe with TT caching, 3-7 piece tables
 - New `SyzygyPath` UCI option
+- The `oxide-aarch64-linux` release artifact is built without the `tablebase` feature: pyrrhic-rs 0.2.0 declares `strcpy` with `i8` pointers and `c_char` is `u8` on aarch64 Linux, so the crate does not compile for that target. Every other artifact includes Syzygy support
 
 ### Opening Book
 

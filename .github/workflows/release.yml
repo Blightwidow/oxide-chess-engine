@@ -19,6 +19,12 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             name: oxide-aarch64-linux
+            # pyrrhic-rs 0.2.0 declares strcpy as (*mut i8, *const i8), but
+            # c_char is u8 on aarch64 Linux, so the crate does not compile for
+            # this target. 0.2.0 is the newest published version, so this
+            # artifact ships without Syzygy support until that is fixed
+            # upstream. Every other target keeps the default features.
+            cargo_flags: "--no-default-features --features host"
           - target: x86_64-apple-darwin
             os: macos-latest
             name: oxide-x86_64-macos
@@ -47,7 +53,7 @@ jobs:
       - name: Build
         env:
           RUSTFLAGS: ""
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} ${{ matrix.cargo_flags }}
 
       - name: Package (unix)
         if: runner.os != 'Windows'

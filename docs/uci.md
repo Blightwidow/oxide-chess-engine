@@ -48,6 +48,10 @@ Loads a NNUE network from a file path, replacing the embedded default. Useful fo
 ### `setoption name SyzygyPath value <path>`
 Sets the path to Syzygy endgame tablebases. Accepts a colon-separated list of directories (e.g. `./syzygy/345:./syzygy/6`). When loaded, the engine probes DTZ tables at the root for optimal move selection and WDL tables during search for exact endgame scores. Only probes positions with piece count within the loaded tables' range and no castling rights. Set to `<empty>` to disable.
 
+Requires the `tablebase` cargo feature (on by default). The prebuilt `oxide-aarch64-linux`
+artifact is the one exception — pyrrhic-rs 0.2.0 does not compile for that target — so it
+reports no `SyzygyPath` support. Build from source on that platform if you need tablebases.
+
 ### `setoption name BookFile value <path>`
 Loads a Polyglot opening book (`.bin`). While a book move exists for the current position, the engine
 plays it instead of searching; the move is picked by weighted random over all matching entries and
