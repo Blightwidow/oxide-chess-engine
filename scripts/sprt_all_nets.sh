@@ -63,8 +63,10 @@ print_summary() {
 
         # Extract the last results block from the log
         local elo games result_label
-        elo=$(grep "^Elo:" "$logfile" | tail -1 | sed 's/Elo: //')
-        games=$(grep "^Games:" "$logfile" | tail -1 | sed 's/Games: \([0-9]*\).*/\1/')
+        elo=$(grep "^Elo:" "$logfile" | tail -1 | sed 's/Elo: //' || true)
+        games=$(grep "^Games:" "$logfile" | tail -1 | sed 's/Games: \([0-9]*\).*/\1/' || true)
+        [ -n "$elo" ] || elo="(no result)"
+        [ -n "$games" ] || games="-"
 
         if grep -q "H1 was accepted" "$logfile"; then
             result_label="PASSED"
@@ -132,10 +134,14 @@ for net in "$NETS_DIR"/*.nnue; do
 
     logfile="${net%.nnue}.sprt.log"
 
-    if [ -f "$logfile" ]; then
+    # Only treat a log as a completed test if it actually recorded results. A run that was
+    # interrupted before its first result leaves a stub log behind, which must not skip the net.
+    if [ -f "$logfile" ] && grep -q "^Elo:" "$logfile"; then
         echo "Skipping $net_name — already tested (see $logfile)"
         skipped=$((skipped + 1))
         continue
+    elif [ -f "$logfile" ]; then
+        echo "Re-running $net_name — previous log has no results (interrupted)"
     fi
 
     echo "=========================================="

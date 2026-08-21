@@ -107,6 +107,19 @@ Nets use SHA256-based naming: `nn-{first 12 hex chars}.nnue`. Only the active (p
 * `scripts/convert_checkpoints.sh` — converts training checkpoints to `.nnue` format
 * `scripts/promote_net.sh <path>` — promotes a net as the new embedded default
 
+### WebAssembly
+
+The engine core also builds for `wasm32-unknown-unknown`, so a browser can play against it.
+
+```bash
+./scripts/build_wasm.sh    # -> pkg/{oxid.js, oxid_bg.wasm, nets/*.nnue}
+node wasm/harness.mjs      # headless smoke test
+```
+
+The wasm module is ~156 KB because the net is fetched by the page rather than embedded.
+The exported API is `init(netBytes)` -> handle, then `legal_moves(fen)` and
+`best_move(fen, movetimeMs)`. See [WebAssembly](docs/wasm.md) for details and limitations.
+
 ## Documentation
 
 Detailed documentation is available in the [`docs/`](docs/) directory:
@@ -115,6 +128,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 * [Search](docs/search.md) — All search techniques, pruning, reductions, move ordering
 * [Evaluation](docs/evaluation.md) — NNUE architecture, handcrafted eval fallback
 * [UCI Protocol](docs/uci.md) — Supported commands and options
+* [WebAssembly](docs/wasm.md) — Browser build, feature gating, JS API
 
 ## Acknowledgements
 

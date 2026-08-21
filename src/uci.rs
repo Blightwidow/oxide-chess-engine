@@ -1,4 +1,4 @@
-use std::time;
+use crate::clock;
 
 use crate::search::{
     defs::{SearchLimits, FEN_START_POSITION},
@@ -18,10 +18,12 @@ impl Uci {
 
         loop {
             if argc == 1 {
-                let read_result = std::io::stdin().read_line(&mut buffer);
-
-                if read_result.is_err() {
-                    buffer = "quit".to_string();
+                // read_line reports EOF as Ok(0), not Err. Without the explicit
+                // zero-byte arm a closed stdin leaves the buffer empty, no branch
+                // below matches, and the loop spins forever at full CPU.
+                match std::io::stdin().read_line(&mut buffer) {
+                    Ok(0) | Err(_) => buffer = "quit".to_string(),
+                    Ok(_) => {}
                 }
             }
 
@@ -35,6 +37,7 @@ impl Uci {
                 println!("id author Theo Dammaretz");
                 println!("option name Hash type spin default 16 min 1 max 512");
                 println!("option name EvalFile type string default <embedded>");
+                #[cfg(feature = "tablebase")]
                 println!("option name SyzygyPath type string default <empty>");
                 println!("option name BookFile type string default <empty>");
                 println!("uciok");
@@ -85,6 +88,9 @@ impl Uci {
                 Uci::eval(search);
             } else if token == "help" {
                 Uci::help();
+            } else if token == "quit" {
+                // Recognized here so it does not fall through to the unknown-command
+                // branch; the actual exit is the check below.
             } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
                 println!("Unknown command: {}. Type help for more information", token);
             }
@@ -221,7 +227,7 @@ impl Uci {
 
     fn bench(search: &mut Search, args: &mut std::str::SplitWhitespace<'_>) {
         let mut nodes: usize = 0;
-        let elapsed = time::Instant::now();
+        let elapsed = clock::Instant::now();
 
         let mut limits = SearchLimits::default();
 
@@ -243,7 +249,7 @@ impl Uci {
             nodes += search.nodes_searched;
         }
 
-        let duration = time::Instant::now() - elapsed + time::Duration::from_millis(1); // Ensure positivity to avoid a 'divide by zero'
+        let duration = clock::Instant::now() - elapsed + clock::Duration::from_millis(1); // Ensure positivity to avoid a 'divide by zero'
 
         println!("\n===========================");
         println!("Total time (ms) : {}", duration.as_millis());
@@ -282,14 +288,14 @@ impl Uci {
         ];
 
         let mut total_nodes: u64 = 0;
-        let total_start = time::Instant::now();
+        let total_start = clock::Instant::now();
 
         for suite in &suites {
             search.position.set(suite.fen.to_string());
             search.nnue.refresh(&search.position);
 
             for depth in 1..=suite.max_depth {
-                let start = time::Instant::now();
+                let start = clock::Instant::now();
                 let nodes = search.perft(depth, false);
                 let elapsed_ms = start.elapsed().as_nanos() as f64 / 1000000.0;
                 let mnps = if elapsed_ms > 0.0 {

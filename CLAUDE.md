@@ -10,6 +10,7 @@ RUSTFLAGS="" cargo build -r                             # Release build (generic
 cargo run -r -- <command>                               # Run directly (e.g. `cargo run -r -- bench`)
 cargo test                                              # Run tests
 cargo clippy                                            # Lint
+./scripts/build_wasm.sh                                 # Browser build (see docs/wasm.md)
 ```
 
 ### Quick Performance Check
@@ -47,6 +48,7 @@ Detailed docs live in `docs/`. Keep them in sync when making changes:
 - `docs/evaluation.md` — NNUE architecture, handcrafted eval fallback
 - `docs/uci.md` — Supported UCI commands and options
 - `docs/time.md` — Time allocation, soft/hard limits, adaptive scaling signals
+- `docs/wasm.md` — WebAssembly build, feature gating (`host`/`tablebase`/`wasm`), JS API
 
 When adding or changing a search technique, evaluation term, or UCI command, update the corresponding doc file and the feature list in `README.md`.
 
@@ -125,13 +127,15 @@ Training uses [bullet](https://github.com/jw1912/bullet) (Rust NNUE trainer by j
 
 ```bash
 cd training
-cargo run --release --features cpu --no-default-features --bin train
+cargo run --release --features metal --bin train
 ```
+
+Defaults to 800 superbatches (~7.5 epochs over the current dataset, ~6h40 at 30s/superbatch on Metal). The learning rate drops by 0.3x every `--end / 6` superbatches, so changing `--end` rescales the schedule instead of leaving the tail of a long run at a dead learning rate.
 
 Resume from checkpoint or train longer:
 
 ```bash
-cargo run --release --features cpu --no-default-features --bin train -- --resume checkpoints/oxid-60 --end 100
+cargo run --release --features metal --bin train -- --resume checkpoints/oxid-60 --end 100
 ```
 
 Convert checkpoint to `.nnue`:
@@ -148,9 +152,30 @@ Batch-convert all checkpoints:
 
 Architecture: `768×8 → 384 (SCReLU) → concat perspectives (768) → 32 (SCReLU) → 1`
 
+### Dataset sizing
+
+Current `training/data/` holds three Stockfish `test80-2023` binpacks (May/Jun/Jul, BT4-relabeled), 49.78 GB. Measured over a 500M-entry sample: ~2.73 bytes per raw position, 58.3% survive the trainer's filter (`ply >= 16`, not in check, `|score| <= 10000`, quiet move).
+
+| Metric | Value |
+|--------|-------|
+| Raw positions | ~18.2 B |
+| After filter | ~10.6 B |
+| Positions / superbatch | 100.0 M (6104 x 16384) |
+| Superbatches / epoch | ~106 |
+
+Re-measure with a short program using `sfbinpack::CompressedTrainingDataEntryReader` (it exposes `read_bytes()`) if the dataset changes — `SfBinpackLoader` cycles its input forever and never reports a total.
+
 > **Note (2026-04):** A PyTorch-based trainer was attempted but abandoned — all nets trained with it were consistently 300+ Elo weaker than bullet-trained equivalents despite identical architecture and quantization. Root cause was training quality (LR schedule, loss convergence) rather than any code bug. Bullet remains the only supported trainer.
 >
-> **Note (2026-04-23):** Metal GPU backend (`Blightwidow/bullet-metal` fork) was attempted to speed up training on M2 Pro. Training ran (~5min/superbatch vs ~5min/sb CPU — no speedup) but produced weaker nets (-25 to -105 Elo vs CPU baseline). Determinism test with fixed seed confirmed the backend is **non-deterministic** (two runs with same seed produce different weights at byte 6145 of `quantised.bin`), likely from atomic reductions in backward pass. Gradient noise from the backend swamps training signal. Bullet is pinned to `feab6443` (CPU) until a deterministic GPU path exists (CUDA works; upstream dropped CPU in newer revisions).
+> **Note (2026-04-23):** Metal GPU backend (`Blightwidow/bullet-metal` fork) was attempted to speed up training on M2 Pro. Training ran (~5min/superbatch vs ~5min/sb CPU — no speedup) but produced weaker nets (-25 to -105 Elo vs CPU baseline). Determinism test with fixed seed confirmed the backend is **non-deterministic** (two runs with same seed produce different weights at byte 6145 of `quantised.bin`), likely from atomic reductions in backward pass. Gradient noise from the backend swamps training signal.
+>
+> **Note (2026-08-19):** Bullet upstream shipped a first-party Metal backend (jw1912/bullet #525, refined by #527–#529, plus `ValueTrainerBuilder::use_device` in #531). Bullet is now pinned to `cebc78a0` and the trainer builds with `--features metal`. Consequences of that bump:
+> - **There is no CPU backend any more.** Upstream's feature set is `cuda`/`rocm`/`metal` only; the no-feature build resolves to a mock runtime that refuses to execute. The old `cpu` feature is gone, so a CPU baseline is no longer reproducible without checking out `feab6443`.
+> - **Validation loss was removed.** `LocalSettings::test_set` exists but upstream prints `Warning: Validation data not currently implemented!`, and the internals the old hand-rolled validation loop used (`bullet::acyclib`, `PreparedBatchDevice`, `ValueTrainer::state`) are gone or private. `training/data/validation/` is detected and reported as unsupported; `val_log.txt` is no longer written.
+> - **Metal is still non-deterministic.** Gradient scatter lowers to `atomic_fetch_add_explicit(..., memory_order_relaxed)` on floats (`crates/gpu/src/runtime/dialect.rs`), so accumulation order varies run to run. CUDA's `atomicAdd` has the same property and trains fine, so this is not disqualifying on its own — but it does mean the 2026-04-23 determinism test will still fail, and net quality must be judged by SPRT rather than by byte-comparing checkpoints.
+> - **Validated (2026-08-21).** ~30s/superbatch on M5 Pro, a ~10x speedup over the old CPU path (~5min/sb on M2 Pro). An 800-superbatch run produced `nn-b9f535fc9a86`, measured at **+26.9 +/- 13.3 Elo (LOS 100%, 1578 games)** against the last v2/256 net — so the backend's non-determinism does not degrade net quality, unlike the 2026-04-23 fork.
+>
+> **Net selection: rank candidates with fixed-game matches, not shared-baseline SPRT.** SPRT stops the moment LLR crosses a boundary, which happens on a favourable fluctuation, so its Elo estimates are biased upward — and most for the tests that stop soonest. Against a shared baseline, sb700 measured +40.1 +/- 14.3 and sb800 +33.7 +/- 13.2, implying sb700 was stronger; a direct 5000-game match reversed it, sb800 by 9.2 +/- 7.5 Elo (LOS 99.2%). Use `-rounds 2500 -repeat` without `-sprt` to rank two nets (~5.4h, +/-9 Elo at 8+0.08 concurrency 6); keep SPRT for the pass/fail gate against the current champion.
 
 ## Development Notes
 

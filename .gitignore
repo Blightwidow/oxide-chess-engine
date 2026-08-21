@@ -24,7 +24,7 @@ games/
 # NNUE nets (only the active net is tracked)
 nets/*.nnue
 nets/*.log
-!nets/nn-8808c22a8203.nnue
+!nets/nn-b9f535fc9a86.nnue
 
 # Python
 __pycache__/
@@ -40,3 +40,6 @@ autoresearch/
 tools/plain2binpack
 data/*.txt
 data/*.binpack
+
+# wasm build output
+pkg/

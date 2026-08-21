@@ -1,9 +1,8 @@
 pub mod defs;
 
-use std::{
-    cmp,
-    time::{self, Instant},
-};
+use std::cmp;
+
+use crate::clock::{Duration, Instant};
 
 use crate::{defs::Side, search::defs::SearchLimits};
 
@@ -18,12 +17,12 @@ pub struct TimeManager {
 
 impl TimeManager {
     pub fn new(limits: SearchLimits, side_to_move: Side, game_ply: usize) -> Self {
-        let start_time = time::Instant::now();
+        let start_time = Instant::now();
 
         // movetime takes priority: use it directly, ignoring wtime/btime
         if limits.movetime != usize::MAX {
             let movetime_ms = (limits.movetime as u64).saturating_sub(SAFETY_MARGIN);
-            let cutoff = start_time + time::Duration::from_millis(movetime_ms);
+            let cutoff = start_time + Duration::from_millis(movetime_ms);
             return Self {
                 soft_limit: Some(cutoff),
                 hard_limit: Some(cutoff),
@@ -46,8 +45,8 @@ impl TimeManager {
                 .round()
                 .min(max_allowed as f64) as u64;
             let base_soft_ms = (time_slice as f64 * SOFT_FACTOR).round() as u64;
-            let soft = start_time + time::Duration::from_millis(base_soft_ms);
-            let hard = start_time + time::Duration::from_millis(time_slice);
+            let soft = start_time + Duration::from_millis(base_soft_ms);
+            let hard = start_time + Duration::from_millis(time_slice);
             Self {
                 soft_limit: Some(soft),
                 hard_limit: Some(hard),
@@ -57,8 +56,8 @@ impl TimeManager {
         } else {
             let time_slice = (increment * MAX_USAGE).round() as u64;
             let base_soft_ms = (time_slice as f64 * SOFT_FACTOR).round() as u64;
-            let soft = start_time + time::Duration::from_millis(base_soft_ms);
-            let hard = start_time + time::Duration::from_millis(time_slice);
+            let soft = start_time + Duration::from_millis(base_soft_ms);
+            let hard = start_time + Duration::from_millis(time_slice);
             Self {
                 soft_limit: Some(soft),
                 hard_limit: Some(hard),
@@ -82,14 +81,14 @@ impl TimeManager {
     pub fn scale_soft_limit(&mut self, factor: f64) {
         if let (Some(start), Some(base_ms)) = (self.start_time, self.base_soft_ms) {
             let scaled_ms = (base_ms as f64 * factor).round() as u64;
-            self.soft_limit = Some(start + time::Duration::from_millis(scaled_ms));
+            self.soft_limit = Some(start + Duration::from_millis(scaled_ms));
         }
     }
 
     /// Check if we should avoid starting a new iterative deepening iteration
     pub fn should_stop_soft(&self) -> bool {
         if let Some(limit) = self.soft_limit {
-            return time::Instant::now() >= limit;
+            return Instant::now() >= limit;
         }
         false
     }
@@ -97,7 +96,7 @@ impl TimeManager {
     /// Check if we should abort mid-search (hard limit)
     pub fn should_stop_hard(&self) -> bool {
         if let Some(limit) = self.hard_limit {
-            return time::Instant::now() >= limit;
+            return Instant::now() >= limit;
         }
         false
     }
