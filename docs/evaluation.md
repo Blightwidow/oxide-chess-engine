@@ -40,8 +40,13 @@ Constants live in `src/nnue/defs.rs`:
 - **Quantization**: accumulator activations clipped to `[0, QA]`, output scaled by `SCALE / (QA × QB)`.
 - **Arithmetic**: pure integer (i16/i32), no floating point.
 - **SIMD**: accumulator updates and SCReLU use platform-specific kernels (`src/nnue/simd.rs`) — NEON on
-  aarch64, AVX2 on x86_64, scalar fallback elsewhere. Accumulators are 32-byte aligned for AVX2
+  aarch64, AVX2 on x86_64, scalar everywhere else. Accumulators are 32-byte aligned for AVX2
   load/store.
+- **AVX2 dispatch**: the x86_64 kernels are gated on `is_x86_feature_detected!("avx2")`, so a generic
+  x86-64 binary runs on pre-AVX2 CPUs via the scalar path instead of trapping. A build with
+  `-C target-cpu=native` (the default in `.cargo/config.toml`) already knows AVX2 is present, so
+  `cfg!(target_feature = "avx2")` short-circuits the check and the branch folds away. The scalar
+  kernels double as the reference the SIMD paths are unit-tested against.
 
 ## Network File Format (v3)
 

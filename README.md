@@ -99,7 +99,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * King bucketing with horizontal mirroring (8 buckets by rank, files e-h mirrored to a-d)
 * Incremental accumulator updates with per-perspective bucket-change refresh
 * Optimized forward pass: pre-computed SCReLU activations, transposed L1 weights
-* SIMD accumulator updates and SCReLU: AVX2 on x86-64, NEON on aarch64, scalar fallback elsewhere
+* SIMD accumulator updates and SCReLU: AVX2 on x86-64 (runtime-detected), NEON on aarch64, scalar fallback elsewhere
 * Embedded net via `include_bytes!` — no external files at runtime
 * Runtime net loading via `EvalFile` UCI option for SPRT testing
 

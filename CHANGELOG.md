@@ -16,7 +16,8 @@ All notable changes to Oxid' are documented in this file.
 
 - Upgraded architecture from 256 to 384 hidden neurons: `768x8 -> 384 (SCReLU) -> 768 -> 32 -> 1`, net format bumped to v3
 - New embedded net: `nn-b9f535fc9a86.nnue`, trained on 49.78 GB of Stockfish `test80-2023` binpacks (BT4-relabeled), 800 superbatches
-- SIMD accumulator updates and SCReLU: AVX2 on x86-64, NEON on aarch64, scalar fallback elsewhere
+- SIMD accumulator updates and SCReLU: AVX2 on x86-64, NEON on aarch64, scalar fallback everywhere else
+- AVX2 is selected by runtime CPU detection, so the generic x86-64 distribution build runs on pre-AVX2 hardware instead of trapping on an illegal instruction. Native builds (`-C target-cpu=native`) resolve the check at compile time
 - Graceful fallback to zero weights when an embedded or loaded net has an incompatible version
 
 ### Search
