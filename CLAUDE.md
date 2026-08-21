@@ -45,7 +45,7 @@ Detailed docs live in `docs/`. Keep them in sync when making changes:
 
 - `docs/architecture.md` — Module overview, component wiring, core types, move encoding
 - `docs/search.md` — Search algorithm, pruning, reductions, extensions, move ordering
-- `docs/evaluation.md` — NNUE architecture, handcrafted eval fallback
+- `docs/evaluation.md` — NNUE architecture, quantization, net file format
 - `docs/uci.md` — Supported UCI commands and options
 - `docs/time.md` — Time allocation, soft/hard limits, adaptive scaling signals
 - `docs/wasm.md` — WebAssembly build, feature gating (`host`/`tablebase`/`wasm`), JS API
@@ -62,7 +62,7 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 |--------|------|---------|
 | **uci** | `src/uci.rs` | UCI protocol handler, main input loop |
 | **search** | `src/search.rs` | Negamax with alpha-beta, iterative deepening, pruning |
-| **evaluate** | `src/evaluate.rs` | Tapered eval with piece-square tables |
+| **evaluate** | `src/evaluate.rs` | Owns the transposition table (no handcrafted eval — evaluation is NNUE-only) |
 | **evaluate/transposition** | `src/evaluate/transposition.rs` | Transposition table (hash, depth, score, best move, node type) |
 | **nnue** | `src/nnue/mod.rs` | NNUE inference: accumulator, feature indexing (`features.rs`), quantized forward pass (`network.rs`), SIMD kernels (`simd.rs`) |
 | **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
@@ -84,7 +84,7 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 
 Each module may have sub-files:
 - `defs.rs` — types and constants for that module
-- `tables.rs` — lookup tables (e.g. piece-square tables in evaluate)
+- `tables.rs` — lookup tables (e.g. magic and attack tables in bitboards)
 - `test.rs` — unit tests
 
 ### Key Types (src/defs.rs)

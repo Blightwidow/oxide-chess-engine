@@ -10,7 +10,7 @@ Oxid' is a single-threaded UCI chess engine written in Rust. This document descr
 Bitboards (Rc) ──┬──> Movegen
                   └──> Position <── Hasher (Rc)
 
-Search owns: Position, Movegen, Eval, Option<NnueEval>
+Search owns: Position, Movegen, Eval, NnueEval
 Uci::main_loop(&mut Search)
 ```
 
@@ -23,8 +23,8 @@ Shared data (`Bitboards`, `Hasher`) is distributed via `Rc` (reference counting)
 | **main** | `src/main.rs` | Initialization, component wiring |
 | **uci** | `src/uci.rs` | UCI protocol handler, main input loop |
 | **search** | `src/search.rs` | Negamax with alpha-beta, iterative deepening |
-| **evaluate** | `src/evaluate.rs` | Handcrafted tapered eval with piece-square tables |
-| **nnue** | `src/nnue/` | NNUE neural network evaluation (optional) |
+| **evaluate** | `src/evaluate.rs` | Owns the transposition table (`evaluate/transposition.rs`) |
+| **nnue** | `src/nnue/` | NNUE inference: accumulator, features, quantized forward pass, SIMD kernels |
 | **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
 | **movegen** | `src/movegen.rs` | Move generation (full and capture-only) |
 | **bitboards** | `src/bitboards.rs` | Magic bitboards, attack tables, LERF mapping |
@@ -40,7 +40,7 @@ Shared data (`Bitboards`, `Hasher`) is distributed via `Rc` (reference counting)
 Each module may have sub-files following a consistent convention:
 
 - `defs.rs` — types and constants for that module
-- `tables.rs` — lookup tables (e.g. piece-square tables in evaluate)
+- `tables.rs` — lookup tables (e.g. magic and attack tables in bitboards)
 - `test.rs` — unit tests
 
 ## Core Types (`src/defs.rs`)
@@ -75,7 +75,7 @@ The engine has a single external dependency: `arrayvec` (stack-allocated move li
 
 ## NNUE Evaluation
 
-The engine optionally supports NNUE (Efficiently Updatable Neural Network) evaluation via the `src/nnue/` module:
+Evaluation is NNUE (Efficiently Updatable Neural Network) only, implemented in the `src/nnue/` module:
 
 | File | Purpose |
 |------|---------|
@@ -84,4 +84,4 @@ The engine optionally supports NNUE (Efficiently Updatable Neural Network) evalu
 | `src/nnue/features.rs` | Feature index mapping with king bucketing and horizontal mirroring |
 | `src/nnue/network.rs` | Weight loading, binary format v3, forward pass |
 
-Architecture: `Input(8×768) → Accumulator(384×2) → Hidden(32) → Output(1)` using integer arithmetic (i16/i32) with SCReLU activations. The input uses 8 king buckets (one per rank) with horizontal mirroring — when a perspective's king is on files e-h, all squares are flipped to files a-d. Each bucket has its own feature transformer weights (768 features × 384 hidden). When a king move crosses a bucket/mirror boundary, the affected perspective's accumulator is recomputed from scratch; otherwise incremental updates apply. Network weights are loaded from a `.nnue` binary file at startup. If no file is found, the engine falls back to the handcrafted evaluation.
+Architecture: `Input(8×768) → Accumulator(384×2) → Hidden(32) → Output(1)` using integer arithmetic (i16/i32) with SCReLU activations. The input uses 8 king buckets (one per rank) with horizontal mirroring — when a perspective's king is on files e-h, all squares are flipped to files a-d. Each bucket has its own feature transformer weights (768 features × 384 hidden). When a king move crosses a bucket/mirror boundary, the affected perspective's accumulator is recomputed from scratch; otherwise incremental updates apply. The default net is embedded at compile time; `EvalFile` loads a different one at runtime. If the net is incompatible, the engine falls back to all-zero weights (every eval returns 0) rather than misreading the bytes — there is no handcrafted evaluation.

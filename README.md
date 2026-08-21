@@ -146,7 +146,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 
 * [Architecture](docs/architecture.md) — Module overview, component wiring, core types
 * [Search](docs/search.md) — All search techniques, pruning, reductions, move ordering
-* [Evaluation](docs/evaluation.md) — NNUE architecture, handcrafted eval fallback
+* [Evaluation](docs/evaluation.md) — NNUE architecture, quantization, net file format
 * [UCI Protocol](docs/uci.md) — Supported commands and options
 * [Time Management](docs/time.md) — Time allocation, soft/hard limits, adaptive scaling
 * [Elo Estimation](docs/elo.md) — Anchor matches against Stash, ERET reference scores
