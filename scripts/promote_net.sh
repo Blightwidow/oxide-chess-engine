@@ -6,7 +6,7 @@
 # This script:
 #   1. Verifies the file exists and has a valid OXNN header
 #   2. Computes SHA256, renames to nn-{hash12}.nnue if needed
-#   3. Updates DEFAULT_EVAL_FILE and include_bytes! path in src/main.rs
+#   3. Updates DEFAULT_EVAL_FILE and include_bytes! path in src/lib.rs
 #   4. Updates .gitignore: swaps the exception line
 #   5. git rm the old net, git add the new one
 #   6. Prints a summary (user commits manually)
@@ -32,13 +32,21 @@ if [ "$MAGIC" != "4f584e4e" ]; then
     exit 1
 fi
 
-# Compute SHA256-based name
-HASH=$(shasum -a 256 "$INPUT" | cut -c1-12)
-NEW_NAME="nn-${HASH}.nnue"
-NEW_PATH="nets/${NEW_NAME}"
+# Keep the existing name if the net already lives in nets/ under an nn-<hash> name.
+# convert_checkpoints.sh names by the hash of quantised.bin, which does not match the hash
+# of the wrapped .nnue file — recomputing here would duplicate the net under a second name
+# and orphan its .sprt.log.
+if [[ "$INPUT" == nets/nn-*.nnue ]]; then
+    NEW_NAME=$(basename "$INPUT")
+    NEW_PATH="$INPUT"
+else
+    HASH=$(shasum -a 256 "$INPUT" | cut -c1-12)
+    NEW_NAME="nn-${HASH}.nnue"
+    NEW_PATH="nets/${NEW_NAME}"
+fi
 
-# Find current promoted net from src/main.rs
-OLD_NAME=$(grep 'pub const DEFAULT_EVAL_FILE' src/main.rs | sed 's/.*"\(.*\)".*/\1/')
+# Find current promoted net from src/lib.rs
+OLD_NAME=$(grep 'pub const DEFAULT_EVAL_FILE' src/lib.rs | sed 's/.*"\(.*\)".*/\1/')
 
 if [ "$NEW_NAME" = "$OLD_NAME" ]; then
     echo "Net is already the active net: $NEW_NAME"
@@ -50,8 +58,8 @@ if [ "$INPUT" != "$NEW_PATH" ]; then
     cp "$INPUT" "$NEW_PATH"
 fi
 
-# Update src/main.rs
-sed -i '' "s|$OLD_NAME|$NEW_NAME|g" src/main.rs
+# Update src/lib.rs
+sed -i '' "s|$OLD_NAME|$NEW_NAME|g" src/lib.rs
 
 # Update .gitignore: swap the exception line
 sed -i '' "s|!nets/$OLD_NAME|!nets/$NEW_NAME|" .gitignore
@@ -59,10 +67,15 @@ sed -i '' "s|!nets/$OLD_NAME|!nets/$NEW_NAME|" .gitignore
 # Git operations
 OLD_PATH="nets/${OLD_NAME}"
 if [ -f "$OLD_PATH" ] && git ls-files --error-unmatch "$OLD_PATH" >/dev/null 2>&1; then
-    git rm "$OLD_PATH"
+    # -f is needed when the outgoing net was staged but never committed (promoted twice
+    # between commits). Its content is reproducible from the training checkpoint.
+    git rm --quiet "$OLD_PATH" 2>/dev/null || {
+        echo "Note: $OLD_NAME was staged but never committed — forcing removal."
+        git rm --quiet -f "$OLD_PATH"
+    }
 fi
 git add "$NEW_PATH"
-git add src/main.rs .gitignore
+git add src/lib.rs .gitignore
 
 echo ""
 echo "=== Net promoted ==="
