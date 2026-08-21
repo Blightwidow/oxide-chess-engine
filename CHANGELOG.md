@@ -22,8 +22,8 @@ All notable changes to Oxid' are documented in this file.
 
 ### Search
 
-- Aspiration windows shrunk to +/-15 cp with exponential widening (window opens fully at delta >= 1000)
-- Singular extensions: double extension when the verification score falls well below `se_beta`, negative extension when the TT move is not singular, plus a ply cap
+- Singular extension verification threshold lowered from depth 10 to depth 8
+- `go nodes <n>` is now honoured: the search stops once the node budget is spent
 
 ### Time Management
 

@@ -78,8 +78,11 @@ Exits the engine.
 During search, the engine reports progress:
 
 ```
-info depth 12 seldepth 18 multipv 1 score cp 35 nodes 482910 nps 1205000 hashfull 142 tbhits 0 time 401 pv e2e4 e7e5 ...
+info depth 12 seldepth 18 multipv 1 score cp 35 nodes 482910 nps 1205000 hashfull 142 tbhits 0 time 401 pv e2e4
 ```
+
+The `pv` field carries the best root move only — the engine keeps no PV table, so no continuation
+is reported. See [Search](search.md#principal-variation).
 
 ## Best Move Output
 

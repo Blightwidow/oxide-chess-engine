@@ -65,6 +65,17 @@ Moves searched later in the move list are searched at reduced depth, since they'
 ### Check Extension
 When the side to move is in check, search depth is extended by 1 ply to avoid horizon effects.
 
+### Singular Extension
+At non-PV nodes with `depth >= 8` and a usable TT entry (depth >= `depth - 3`, lower-bound or exact,
+non-mate score), the TT move is excluded and a verification search runs at `(depth - 1) / 2` with a
+null window around `se_beta = tt_value - depth * 2`:
+
+- Score below `se_beta` → the TT move is singular, extend by 1 ply
+- Score >= `beta` → multi-cut, several moves beat beta, so return that score
+- Extensions cap at +1; there is no double extension, no negative extension, and no per-ply budget
+
+A time check (`se_time_ok`) gates the verification search so it cannot overrun the soft limit.
+
 ## Move Ordering
 
 Good move ordering is critical for alpha-beta efficiency. Moves are generated in stages via a **MovePicker** with lazy legality checking (legality tested per-move instead of generating all legal moves upfront):
@@ -104,22 +115,30 @@ At the leaves of the main search, a quiescence search resolves tactical sequence
 
 The transposition table stores previously searched positions to avoid redundant work.
 
-- **Bucket layout**: 3 entries per bucket (8 bytes each), 32-byte aligned buckets (cache-line friendly)
-- **Entry packing**: 16-bit key verification, u16 move, i16 value, u8 depth, packed generation (6 bits) + node type (2 bits)
-- **Indexing**: power-of-2 bitmask (no modulo), key16 from top 16 bits of zobrist for verification
+- **Layout**: one `Entry` per index — full 64-bit key, `HashData` (u8 depth, i16 value, best move, node
+  type) and a u8 generation. No bucketing and no bit-packing.
+- **Indexing**: `key % size` (modulo, not a power-of-2 mask), so the whole key is stored and compared
+  rather than a truncated verification key.
 - **Default size**: 16 MB (configurable via UCI `Hash` option, 1-512 MB)
-- **Replacement**: prefer same-key or empty slots; otherwise evict lowest-quality entry (depth + generation bonus)
-- **Prefetch**: `_mm_prefetch` after `do_move` to warm L1 cache before child probe (x86_64 only)
-- **Hashfull**: sampled from first 333 buckets (999 entries), reported in UCI info strings
+- **Replacement**: overwrite when the slot is empty, holds the same key, belongs to an older
+  generation, or the incoming depth is >= the stored depth.
+- **Hashfull**: sampled from the first 1000 entries, counting current-generation entries, reported in
+  UCI info strings.
 
-## PV Tracking
+Not implemented: multi-entry buckets, packed entries, and TT prefetch. They were on the roadmap
+(`TODOS.md`) and were documented here before being built — see that file for their status.
 
-The search maintains a triangular PV table to track the principal variation across all plies.
+## Principal Variation
 
-- **Structure**: `pv_table[ply][ply..pv_length[ply]]` — each ply stores its PV suffix
-- **Update**: on alpha improvement, the current move is prepended and the child PV is copied
-- **UCI output**: full multi-move PV printed in info lines; mate scores formatted as `score mate N`
-- **Ponder**: extracted from PV[1] (no TT probe needed)
+There is no PV table. `Search` tracks only the best root move, so UCI info lines carry a single-move
+`pv` field:
+
+```
+info depth 6 seldepth 8 multipv 1 score cp 53 nodes 27900 nps 845454 hashfull 3 tbhits 0 time 33 pv d2d4
+```
+
+The ponder move is recovered by probing the TT after the best move is played (`src/search.rs:206`),
+not read off a PV. Scores are always printed as `score cp`; there is no `score mate N` formatting.
 
 ## Syzygy Endgame Tablebases
 
