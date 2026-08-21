@@ -43,18 +43,20 @@ When merging binpacks from multiple generation runs, filenames may collide. Use 
 ./training/rename_binpacks.sh
 ```
 
-## Training (Rust/bullet — CPU)
+## Training (Rust/bullet — Metal GPU)
 
 Place binpacks in `training/data/`, then:
 
 ```bash
 cd training
-cargo run --release --features cpu --no-default-features --bin train
+cargo run --release --features metal --bin train
 ```
 
 Architecture: `768×8 → 384 (SCReLU) → concat perspectives (768) → 32 (SCReLU) → 1`
 
-Checkpoints are saved every 10 superbatches in `training/checkpoints/`.
+Defaults to 800 superbatches. LR starts at 0.001 and drops 0.3x every `--end / 6` superbatches, so `--end` rescales the whole schedule.
+
+Checkpoints are saved every 100 superbatches in `training/checkpoints/` (the final superbatch is always saved).
 
 ### Convert checkpoint to .nnue
 

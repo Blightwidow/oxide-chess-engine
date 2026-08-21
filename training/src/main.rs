@@ -15,17 +15,22 @@ use bullet::{
     value::{loader::SfBinpackLoader, ValueTrainerBuilder},
 };
 
-use bullet::acyclib::graph::like::GraphLike;
-use bullet::acyclib::trainer::dataloader::PreparedBatchDevice;
-use bullet::value::loader::DataLoader;
-
 const HIDDEN_SIZE: usize = 384;
 const L1_SIZE: usize = 32;
 const NUM_BUCKETS: usize = 8;
 const QA: i16 = 255;
 const QB: i16 = 64;
 const THREADS: usize = 8;
-const VAL_BATCHES: usize = 64;
+
+/// Default run length. The dataset in `data/` is ~10.6B filtered positions, i.e. ~106
+/// superbatches per epoch, so this is ~7.5 epochs — matching bullet's reference config.
+const DEFAULT_END_SUPERBATCH: usize = 800;
+/// Superbatches between checkpoints. The final superbatch is always saved regardless.
+const SAVE_RATE: usize = 100;
+/// Number of learning rate drops to fit into a run, however long it is.
+const LR_DROPS: usize = 6;
+const LR_START: f32 = 0.001;
+const LR_GAMMA: f32 = 0.3;
 
 struct TrainingArgs {
     resume_checkpoint: Option<String>,
@@ -35,7 +40,7 @@ struct TrainingArgs {
 fn parse_args() -> TrainingArgs {
     let args: Vec<String> = std::env::args().collect();
     let mut resume_checkpoint = None;
-    let mut end_superbatch = 100;
+    let mut end_superbatch = DEFAULT_END_SUPERBATCH;
     let mut index = 1;
 
     while index < args.len() {
@@ -64,7 +69,10 @@ fn parse_args() -> TrainingArgs {
                 println!();
                 println!("Options:");
                 println!("  --resume <path>  Resume from checkpoint (e.g. checkpoints/oxid-100)");
-                println!("  --end <N>        End superbatch (default: 100)");
+                println!("  --end <N>        End superbatch (default: {DEFAULT_END_SUPERBATCH})");
+                println!();
+                println!("The learning rate drops by a factor of {LR_GAMMA} every --end/{LR_DROPS}");
+                println!("superbatches, so the schedule always fits {LR_DROPS} drops into the run.");
                 std::process::exit(0);
             }
             other => {
@@ -107,20 +115,12 @@ fn delete_old_checkpoints(directory: &str) {
     }
     let entries: Vec<_> = std::fs::read_dir(path)
         .ok()
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .filter(|e| e.path().is_dir())
-                .collect()
-        })
+        .map(|rd| rd.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).collect())
         .unwrap_or_default();
     if entries.is_empty() {
         return;
     }
-    println!(
-        "Found {} existing checkpoint(s) in {}/",
-        entries.len(),
-        directory
-    );
+    println!("Found {} existing checkpoint(s) in {}/", entries.len(), directory);
     print!("Delete old checkpoints before starting? [y/N] ");
     use std::io::Write;
     std::io::stdout().flush().ok();
@@ -180,11 +180,13 @@ fn main() {
                 .collect()
         })
         .unwrap_or_default();
-    let has_validation = !val_file_paths.is_empty();
-    if has_validation {
-        println!("Found {} validation binpack files", val_file_paths.len());
-    } else {
-        println!("No validation data found in data/validation/ — skipping validation loss");
+    if !val_file_paths.is_empty() {
+        println!(
+            "Found {} validation binpack files in data/validation/, but validation loss is \
+             unsupported: upstream bullet has not reimplemented it since the crate split. \
+             Training will proceed without it.",
+            val_file_paths.len()
+        );
     }
 
     // 8 king buckets by rank with horizontal mirroring (files e-h mapped to d-a)
@@ -197,7 +199,6 @@ fn main() {
     };
 
     let mut trainer = ValueTrainerBuilder::default()
-        .use_threads(THREADS)
         .dual_perspective()
         .optimiser(AdamW)
         .inputs(ChessBucketsMirrored::new(buckets))
@@ -242,8 +243,16 @@ fn main() {
     let loader = SfBinpackLoader::new_concat_multiple(&data_refs, 1024, 4, filter);
 
     let batch_size = 16384;
-    let save_rate = 20;
+    let save_rate = SAVE_RATE;
     let end_superbatch = args.end_superbatch;
+
+    // Scale the LR schedule to the run length: a fixed step would either waste most of a long
+    // run at a dead learning rate, or never decay at all on a short one.
+    let lr_step = (end_superbatch / LR_DROPS).max(1);
+    println!(
+        "LR schedule: {LR_START}, x{LR_GAMMA} every {lr_step} superbatches ({} drops by superbatch {end_superbatch})",
+        end_superbatch / lr_step
+    );
 
     let settings = LocalSettings {
         threads: THREADS,
@@ -252,96 +261,23 @@ fn main() {
         batch_queue_size: 32,
     };
 
-    if !has_validation {
-        // No validation data — run normally
-        let schedule = TrainingSchedule {
-            net_id: "oxid".to_string(),
-            eval_scale: 400.0,
-            steps: TrainingSteps {
-                batch_size,
-                batches_per_superbatch: 6104,
-                start_superbatch,
-                end_superbatch,
-            },
-            wdl_scheduler: ConstantWDL { value: 0.75 },
-            lr_scheduler: StepLR {
-                start: 0.001,
-                gamma: 0.3,
-                step: 15,
-            },
-            save_rate,
-        };
-        trainer.run(&schedule, &settings, &loader);
-        return;
-    }
+    let schedule = TrainingSchedule {
+        net_id: "oxid".to_string(),
+        eval_scale: 400.0,
+        steps: TrainingSteps {
+            batch_size,
+            batches_per_superbatch: 6104,
+            start_superbatch,
+            end_superbatch,
+        },
+        wdl_scheduler: ConstantWDL { value: 0.75 },
+        lr_scheduler: StepLR {
+            start: LR_START,
+            gamma: LR_GAMMA,
+            step: lr_step,
+        },
+        save_rate,
+    };
 
-    // Segmented training with validation loss
-    let val_refs: Vec<&str> = val_file_paths.iter().map(|s| s.as_str()).collect();
-    let val_loader = SfBinpackLoader::new_concat_multiple(&val_refs, 256, 4, filter);
-    let blend = 0.75; // ConstantWDL value
-    let scale = 400.0; // eval_scale
-
-    let mut val_log = Vec::new();
-
-    for segment_start in (start_superbatch..=end_superbatch).step_by(save_rate) {
-        let segment_end = (segment_start + save_rate - 1).min(end_superbatch);
-
-        let schedule = TrainingSchedule {
-            net_id: "oxid".to_string(),
-            eval_scale: scale,
-            steps: TrainingSteps {
-                batch_size,
-                batches_per_superbatch: 6104,
-                start_superbatch: segment_start,
-                end_superbatch: segment_end,
-            },
-            wdl_scheduler: ConstantWDL { value: blend },
-            lr_scheduler: StepLR {
-                start: 0.001,
-                gamma: 0.3,
-                step: 15,
-            },
-            save_rate,
-        };
-
-        trainer.run(&schedule, &settings, &loader);
-
-        // Compute validation loss via forward-only passes
-        let mut val_batches: Vec<Vec<_>> = Vec::new();
-        val_loader.map_batches(0, batch_size, |batch| {
-            val_batches.push(batch.to_vec());
-            val_batches.len() >= VAL_BATCHES
-        });
-
-        let mut total_loss = 0.0;
-        let num_batches = val_batches.len();
-
-        for batch in &val_batches {
-            let host = trainer.state.prepare(batch, THREADS, blend, scale);
-
-            let graph = trainer.optimiser.graph.primary_mut();
-
-            let mut dev = PreparedBatchDevice::new(graph.devices(), &host).unwrap();
-            dev.load_into_graph(graph).unwrap();
-            graph.synchronise().unwrap();
-            let loss = graph.forward().unwrap();
-            total_loss += loss / batch.len() as f32;
-        }
-
-        let avg_val_loss = if num_batches > 0 {
-            total_loss / num_batches as f32
-        } else {
-            0.0
-        };
-        println!(
-            "[Validation] Superbatch {} | val_loss = {:.5}",
-            segment_end, avg_val_loss
-        );
-
-        val_log.push(format!("superbatch {} | val_loss = {:.5}", segment_end, avg_val_loss));
-
-        // Write validation log to checkpoint directory
-        let log_path = format!("{}/val_log.txt", settings.output_directory);
-        std::fs::write(&log_path, val_log.join("\n") + "\n").ok();
-    }
+    trainer.run(&schedule, &settings, &loader);
 }
