@@ -18,10 +18,12 @@ impl Uci {
 
         loop {
             if argc == 1 {
-                let read_result = std::io::stdin().read_line(&mut buffer);
-
-                if read_result.is_err() {
-                    buffer = "quit".to_string();
+                // read_line reports EOF as Ok(0), not Err. Without the explicit
+                // zero-byte arm a closed stdin leaves the buffer empty, no branch
+                // below matches, and the loop spins forever at full CPU.
+                match std::io::stdin().read_line(&mut buffer) {
+                    Ok(0) | Err(_) => buffer = "quit".to_string(),
+                    Ok(_) => {}
                 }
             }
 
@@ -86,6 +88,9 @@ impl Uci {
                 Uci::eval(search);
             } else if token == "help" {
                 Uci::help();
+            } else if token == "quit" {
+                // Recognized here so it does not fall through to the unknown-command
+                // branch; the actual exit is the check below.
             } else if !token.is_empty() && token.chars().nth(0).unwrap_or_default() != '#' {
                 println!("Unknown command: {}. Type help for more information", token);
             }
