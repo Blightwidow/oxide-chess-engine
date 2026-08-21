@@ -52,9 +52,11 @@ fn eval_starting_position() {
     search.position.set(FEN_START_POSITION.to_string());
     search.nnue.refresh(&search.position);
     let score = search.evaluate_position();
+    // Deliberately loose: this is a smoke test for a badly scaled or broken net, not a claim
+    // about the exact opening advantage. A sane net gives White a small edge here.
     assert!(
-        score.abs() < 50,
-        "Starting position should be roughly equal, got {}",
+        score > 0 && score < 100,
+        "Starting position should be a small White edge, got {}",
         score
     );
 }

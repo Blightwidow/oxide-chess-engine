@@ -39,10 +39,10 @@ pub mod wasm;
 
 /// Filename of the net compiled into the native binary.
 #[cfg(not(target_arch = "wasm32"))]
-pub const DEFAULT_EVAL_FILE: &str = "nn-8808c22a8203.nnue";
+pub const DEFAULT_EVAL_FILE: &str = "nn-b9f535fc9a86.nnue";
 
 /// The net is embedded for native builds only. wasm callers fetch the net over
 /// the network and hand the bytes to [`wasm::init`], which keeps the 3 MB of
 /// weights out of the `.wasm` blob.
 #[cfg(not(target_arch = "wasm32"))]
-pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-8808c22a8203.nnue"));
+pub const EMBEDDED_NET: &[u8] = include_bytes!(concat!("../nets/", "nn-b9f535fc9a86.nnue"));
