@@ -2,6 +2,81 @@
 
 All notable changes to Oxid' are documented in this file.
 
+## v2.0.0
+
+### Breaking
+
+- NNUE net format bumped to v3 (384 hidden neurons). v2 nets no longer load — the engine falls back
+  to zero weights instead of misreading them, so any external net passed via `EvalFile` must be
+  retrained or reconverted.
+- The `oxid` binary now declares `required-features = ["host"]`. A bare `cargo build` with
+  `--no-default-features` builds the library only.
+
+### NNUE Evaluation
+
+- Upgraded architecture from 256 to 384 hidden neurons: `768x8 -> 384 (SCReLU) -> 768 -> 32 -> 1`, net format bumped to v3
+- New embedded net: `nn-b9f535fc9a86.nnue`, trained on 49.78 GB of Stockfish `test80-2023` binpacks (BT4-relabeled), 800 superbatches
+- SIMD accumulator updates and SCReLU: AVX2 on x86-64, NEON on aarch64, scalar fallback elsewhere
+- Graceful fallback to zero weights when an embedded or loaded net has an incompatible version
+
+### Search
+
+- Aspiration windows shrunk to +/-15 cp with exponential widening (window opens fully at delta >= 1000)
+- Singular extensions: double extension when the verification score falls well below `se_beta`, negative extension when the TT move is not singular, plus a ply cap
+
+### Time Management
+
+- Adaptive soft-limit scaling with three new signals at depth >= 6, combined multiplicatively with best-move stability and clamped to [0.3, 2.0]:
+  - Node TM: stop early (0.6x) when the best move takes >90% of root nodes, extend (1.3x) below 50%
+  - Score stability: extend (1.4x) on >30 cp drops between iterations, shrink (0.9x) when stable
+  - Eval complexity: extend (1.2x) when the top-2 spread is <20 cp, shrink (0.7x) above 100 cp
+- SPRT [0, 5] passed at +8.5 Elo (10250 games, LLR 2.97)
+
+### Endgames
+
+- Syzygy endgame tablebase probing via `pyrrhic-rs`: root DTZ probe for move selection, in-search WDL probe with TT caching, 3-7 piece tables
+- New `SyzygyPath` UCI option
+
+### Opening Book
+
+- Polyglot book support through the new `BookFile` UCI option: root probe before search, weighted-random selection over matching entries, validated against the legal move list
+- Separate Polyglot Zobrist hash (781-key table) with en-passant filtering
+
+### WebAssembly
+
+- Engine core builds for `wasm32-unknown-unknown`; crate split into lib plus a thin binary
+- Feature gating: `host` (uci/benchmark/eret/datagen), `tablebase` (links C, native only), `wasm` (the wasm-bindgen shim)
+- Clock reads moved to `src/clock.rs` — `std` natively, `web-time` on wasm
+- JS API: `init(netBytes)` -> handle, `legal_moves(fen)`, `best_move(fen, movetimeMs)`; module is ~156 KB because the net is fetched by the page
+
+### Tooling
+
+- Self-play data generation: `datagen` UCI command, `scripts/generate_data.sh` pipeline, `tools/plain2binpack` converter
+- ERET (Eigenmann Rapid Engine Test) command for fast strength iteration: `eret [seconds]` or `eret nodes <n>`
+- NNUE training moved to Rust [bullet](https://github.com/jw1912/bullet) with its first-party Metal backend (~30s/superbatch on Apple Silicon, ~10x the old CPU path)
+- `scripts/promote_net.sh`, `scripts/convert_checkpoints.sh`, `scripts/validate_nets.sh`, `scripts/sprt_all_nets.sh` for net management and testing
+
+### Strength
+
+- Estimated strength: ~2765 Elo, bracketed by SPRT anchor matches at tc=8+0.08:
+  - +66.9 +/- 27.1 Elo vs Stash v21 (CCRL blitz 2714), H1 accepted after 526 games
+  - -19.5 +/- 18.1 Elo vs Stash v22 (~2770), H0 accepted after 944 games
+- `scripts/build_stash.sh` builds the Stash anchors natively on arm64 macOS
+
+## v1.3.0
+
+### Search
+
+- Continuation history (1-ply + 2-ply) for quiet move ordering
+- Capture history for capture move ordering, with gravity updates and malus on beta cutoffs
+- Quiet moves scored by main history + continuation history; captures by MVV-LVA + capture history
+- SEE extracted as a free function
+
+### Performance
+
+- SPRT neutral at tc=8+0.08 — the ordering improvement offsets the table overhead
+- Bench: -5% nodes at depth 13 vs v1.2.0
+
 ## v1.2.0
 
 ### Search

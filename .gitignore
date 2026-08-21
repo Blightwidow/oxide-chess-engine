@@ -43,3 +43,6 @@ data/*.binpack
 
 # wasm build output
 pkg/
+
+# Elo-anchor opponent builds (see docs/elo.md)
+engines/

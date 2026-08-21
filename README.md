@@ -2,7 +2,7 @@
 
 ![Logo illustration](./docs/logo.png)
 
-A 2625 Elo UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
+A 2765 Elo UCI-compatible chess engine written in Rust. Self-contained single binary with embedded NNUE evaluation.
 
 > **Note:** Previously named *Oxide*. Renamed to *Oxid'* after discovering another chess engine already uses that name.
 
@@ -37,6 +37,7 @@ cargo run -r -- bench 32 1 15      # Custom: 32 MB hash, 1 thread, depth 15
 | `Hash` | spin | 16 | Transposition table size in MB (1-512) |
 | `EvalFile` | string | `<embedded>` | Load a different NNUE net at runtime |
 | `SyzygyPath` | string | `<empty>` | Colon-separated paths to Syzygy tablebase files |
+| `BookFile` | string | `<empty>` | Path to a Polyglot opening book (`.bin`) |
 
 It does not come with a GUI. You can use [Cute Chess](https://cutechess.com/) or [Arena](http://www.playwitharena.de/).
 
@@ -90,6 +91,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * Capture history for capture move ordering
 * History malus for quiet/capture moves tried before beta cutoffs
 * Syzygy endgame tablebases (root DTZ probe, in-search WDL probe via pyrrhic-rs)
+* Adaptive time management (node TM, best-move stability, score stability, eval complexity)
 
 ### Evaluation
 
@@ -97,6 +99,7 @@ Perft aggregate: 18652422582 146567ms 127.26 MNodes/s
 * King bucketing with horizontal mirroring (8 buckets by rank, files e-h mirrored to a-d)
 * Incremental accumulator updates with per-perspective bucket-change refresh
 * Optimized forward pass: pre-computed SCReLU activations, transposed L1 weights
+* SIMD accumulator updates and SCReLU: AVX2 on x86-64, NEON on aarch64, scalar fallback elsewhere
 * Embedded net via `include_bytes!` — no external files at runtime
 * Runtime net loading via `EvalFile` UCI option for SPRT testing
 
@@ -106,6 +109,23 @@ Nets use SHA256-based naming: `nn-{first 12 hex chars}.nnue`. Only the active (p
 
 * `scripts/convert_checkpoints.sh` — converts training checkpoints to `.nnue` format
 * `scripts/promote_net.sh <path>` — promotes a net as the new embedded default
+
+### Opening Book
+
+Polyglot books are supported through the `BookFile` UCI option. While the current position is in the
+book, the engine returns a book move (weighted random over the matching entries) instead of searching.
+
+### Training Data Generation
+
+The engine generates its own NNUE training data by self-play:
+
+```bash
+printf "datagen 8 10000 data/selfplay.txt\n" | ./target/release/oxid
+./scripts/generate_data.sh 8 10000 selfplay    # build + generate + convert to binpack
+```
+
+Games use 8 random opening plies, win/draw adjudication, and a 400-ply cap. Nets are trained with
+[bullet](https://github.com/jw1912/bullet) (see [`training/`](training/)).
 
 ### WebAssembly
 
@@ -128,6 +148,8 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 * [Search](docs/search.md) — All search techniques, pruning, reductions, move ordering
 * [Evaluation](docs/evaluation.md) — NNUE architecture, handcrafted eval fallback
 * [UCI Protocol](docs/uci.md) — Supported commands and options
+* [Time Management](docs/time.md) — Time allocation, soft/hard limits, adaptive scaling
+* [Elo Estimation](docs/elo.md) — Anchor matches against Stash, ERET reference scores
 * [WebAssembly](docs/wasm.md) — Browser build, feature gating, JS API
 
 ## Acknowledgements

@@ -19,10 +19,31 @@ Oxid' doesn't have an official CCRL rating. To estimate its strength, we run SPR
    ```
 3. If Oxid' wins the SPRT (H1 accepted), it is likely stronger than that Stash version. Test upward. If it loses (H0 accepted), test downward. The Elo estimate is bracketed by the highest version Oxid' beats and the lowest it loses to.
 
+### Reading SPRT Elo
+
+SPRT stops the moment the LLR crosses a boundary, which happens on a fluctuation favouring the
+accepted hypothesis, so its Elo point estimate is biased *outward*: a passed test overstates the win,
+a failed test overstates the loss. Both anchors therefore bound the truth from the outside, and the
+estimate belongs between them rather than at either endpoint. Use fixed-game matches
+(`-rounds 2500 -repeat`, no `-sprt`) when an unbiased number matters.
+
+### Building the Stash anchors
+
+Stash's Makefile only knows x86 arch profiles. `scripts/build_stash.sh <tag>` builds a release for
+arm64 macOS: it clones `mhouppin/stash-bot` into `engines/` (gitignored), compiles the generic C
+sources with `-DUSE_POPCNT` so popcount lowers to `__builtin_popcountll`, and satisfies the
+`<immintrin.h>` include that define drags in with an empty shim header — Stash guards `_mm_prefetch`
+behind `USE_POPCNT`, so the shim also provides that intrinsic via `__builtin_prefetch`.
+
+```bash
+./scripts/build_stash.sh v21.0    # -> engines/stash-v21
+```
+
 ## Elo Table
 
 | Oxid' Version | Estimated Elo | Notes |
 |---------------|---------------|-------|
+| v2.0.0 | ~2765 | +66.9 +/- 27.1 vs Stash v21 (2714), -19.5 +/- 18.1 vs Stash v22 (2770*) |
 | v1.1.1 | ~2600 | +46 vs Stash v20 (2509), -31 vs Stash v21 (2714) |
 | v1.1.0 | ~2401 | Bucketed NNUE, ~+1 Elo over v1.0.1 |
 | v1.0.1 | ~2400 | History malus, TT age replacement, +19.77 Elo over v1.0.0 |

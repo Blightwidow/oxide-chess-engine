@@ -6,7 +6,7 @@ use oxid::{
 };
 
 fn main() {
-    println!("Oxid' v1.3.0 by Theo Dammaretz");
+    println!("Oxid' v{} by Theo Dammaretz", env!("CARGO_PKG_VERSION"));
 
     let bitboards = Rc::new(Bitboards::new());
     #[cfg(feature = "tablebase")]

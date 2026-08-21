@@ -64,6 +64,7 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 | **search** | `src/search.rs` | Negamax with alpha-beta, iterative deepening, pruning |
 | **evaluate** | `src/evaluate.rs` | Tapered eval with piece-square tables |
 | **evaluate/transposition** | `src/evaluate/transposition.rs` | Transposition table (hash, depth, score, best move, node type) |
+| **nnue** | `src/nnue/mod.rs` | NNUE inference: accumulator, feature indexing (`features.rs`), quantized forward pass (`network.rs`), SIMD kernels (`simd.rs`) |
 | **position** | `src/position.rs` | Board state, do/undo move, Zobrist hashing |
 | **movegen** | `src/movegen.rs` | Legal move generation |
 | **bitboards** | `src/bitboards.rs` | Magic bitboards, LERF mapping |
@@ -73,6 +74,10 @@ Single-threaded engine. Entry point: `src/main.rs` creates core components and r
 | **benchmark** | `src/benchmark.rs` | 46-position bench suite |
 | **datagen** | `src/datagen.rs` | Self-play training data generation |
 | **tablebase** | `src/tablebase.rs` | Syzygy endgame tablebase probing (via pyrrhic-rs) |
+| **book** | `src/book.rs` | Polyglot opening book loading and weighted-random probing |
+| **eret** | `src/eret.rs` | Eigenmann Rapid Engine Test suite and Elo estimate |
+| **clock** | `src/clock.rs` | Monotonic clock abstraction (native vs wasm) |
+| **wasm** | `src/wasm.rs` | wasm-bindgen entry points for the browser build |
 | **misc** | `src/misc.rs` | Bit manipulation utilities |
 
 ### Module Organization

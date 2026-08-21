@@ -48,8 +48,20 @@ Loads a NNUE network from a file path, replacing the embedded default. Useful fo
 ### `setoption name SyzygyPath value <path>`
 Sets the path to Syzygy endgame tablebases. Accepts a colon-separated list of directories (e.g. `./syzygy/345:./syzygy/6`). When loaded, the engine probes DTZ tables at the root for optimal move selection and WDL tables during search for exact endgame scores. Only probes positions with piece count within the loaded tables' range and no castling rights. Set to `<empty>` to disable.
 
-### `bench [hash_size] [threads] [depth]`
-Runs the benchmark suite (46 positions). Default depth: 13. Reports total nodes, time, and nodes/second.
+### `setoption name BookFile value <path>`
+Loads a Polyglot opening book (`.bin`). While a book move exists for the current position, the engine
+plays it instead of searching; the move is picked by weighted random over all matching entries and
+validated against the legal move list. Set to `<empty>` to disable.
+
+### `bench [hash_size] [threads] [depth] [count]`
+Runs the benchmark suite (46 positions). Default depth: 13. `count` limits the run to the first N
+positions for quick before/after comparisons. Reports total nodes, time, and nodes/second.
+
+### `eret [seconds]` / `eret nodes <n>`
+Runs the 111-position Eigenmann Rapid Engine Test as a quick strength proxy. `eret 15` gives the
+engine 15 seconds per position; `eret nodes <n>` uses a fixed node budget instead for deterministic
+runs. Default: 1 second per position. At 15s the engine also prints an estimated Elo derived from a
+polynomial fit over reference engines (see [Elo Estimation](elo.md)).
 
 ### `datagen [depth] [num_games] [output_path]`
 Generates self-play training data for NNUE training. Plays games against itself with random openings (8 random plies), fixed-depth search, and writes positions to a plain text file. Default: depth 8, 1000 games, `data/selfplay.txt`. Output format: `FEN;MOVE;SCORE;PLY;WDL` (one position per line). Use `tools/plain2binpack` to convert to Stockfish binpack format for training.
