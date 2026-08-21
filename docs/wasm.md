@@ -41,15 +41,17 @@ env var for a wasm build — env overrides config wholesale and would drop the f
 
 ## JS API
 
-The net is **not** embedded in the `.wasm` blob — that keeps it at ~156 KB
-instead of ~3.3 MB. The page fetches the net and passes the bytes in.
+The net is **not** embedded in the `.wasm` blob — that keeps the module at
+~156 KB instead of several MB. The page fetches the net and passes the bytes in.
+`scripts/build_wasm.sh` copies the currently promoted net (the one named by
+`DEFAULT_EVAL_FILE` in `src/lib.rs`) into `pkg/nets/`.
 
 ```js
 import initWasm, { init } from "./oxid.js";
 
 await initWasm();
 const netBytes = new Uint8Array(
-  await (await fetch("./nets/nn-8808c22a8203.nnue")).arrayBuffer(),
+  await (await fetch("./nets/<promoted-net>.nnue")).arrayBuffer(),
 );
 
 const engine = init(netBytes);                  // -> Engine handle

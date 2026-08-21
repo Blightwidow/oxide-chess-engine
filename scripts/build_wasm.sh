@@ -29,9 +29,16 @@ echo "Generating JS bindings into $OUTPUT_DIR/"
 rm -rf "$OUTPUT_DIR"
 wasm-bindgen "$TARGET_DIR/oxid.wasm" --out-dir "$OUTPUT_DIR" --target web --no-typescript
 
-# The wasm blob carries no net, so ship the nets alongside it.
+# The wasm blob carries no net, so ship the promoted net alongside it. Read the
+# name from src/lib.rs rather than globbing nets/ — a local checkout often holds
+# several candidate nets under SPRT, and only the promoted one belongs here.
+NET_NAME="$(grep 'pub const DEFAULT_EVAL_FILE' src/lib.rs | sed 's/.*"\(.*\)".*/\1/')"
+if [ -z "$NET_NAME" ] || [ ! -f "nets/$NET_NAME" ]; then
+  echo "could not resolve the promoted net from src/lib.rs (got '${NET_NAME:-}')" >&2
+  exit 1
+fi
 mkdir -p "$OUTPUT_DIR/nets"
-cp nets/*.nnue "$OUTPUT_DIR/nets/"
+cp "nets/$NET_NAME" "$OUTPUT_DIR/nets/"
 
 echo "Done. Contents of $OUTPUT_DIR:"
 ls -la "$OUTPUT_DIR" "$OUTPUT_DIR/nets"
