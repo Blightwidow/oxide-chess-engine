@@ -1469,7 +1469,7 @@ fn see(position: &Position, mv: Move) -> i16 {
         gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
 
         // Pruning: if neither side can improve, stop early
-        if (-gain[depth]).max(gain[depth - 1]) < 0 {
+        if (-gain[depth - 1]).max(gain[depth]) < 0 {
             break;
         }
 
@@ -1529,7 +1529,7 @@ fn see(position: &Position, mv: Move) -> i16 {
     // Minimax walk-back: each side can choose to stop the exchange
     while depth > 1 {
         depth -= 1;
-        gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
+        gain[depth - 1] = -((-gain[depth - 1]).max(gain[depth]));
     }
 
     gain[0]

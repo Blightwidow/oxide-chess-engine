@@ -11,6 +11,8 @@ mod perft;
 #[cfg(test)]
 mod pitfalls;
 #[cfg(test)]
+mod see;
+#[cfg(test)]
 mod tactics;
 
 #[cfg(test)]
