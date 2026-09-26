@@ -1080,7 +1080,7 @@ impl Search {
             // Check capture/promotion before do_move since board changes
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();
-            let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
+            let is_capture = move_picker::is_capture(mv, &self.position);
             let is_promotion = move_type == MoveTypes::PROMOTION;
             let is_quiet = !is_capture && !is_promotion;
             let piece_type = type_of_piece(self.position.board[mv.from_sq()]);
