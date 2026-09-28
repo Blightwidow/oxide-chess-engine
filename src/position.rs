@@ -598,6 +598,11 @@ impl Position {
                 {
                     return false;
                 }
+                // Can't castle out of check: legal() only tests the squares the king passes
+                // through, not the one it starts on.
+                if self.checkers_bb(us) != EMPTY {
+                    return false;
+                }
                 // Castling rights must include this specific castling
                 self.castling_masks[from] & self.castling_masks[to] & self.states.last().unwrap().castling_rights != 0
             }
@@ -636,6 +641,11 @@ impl Position {
                 }
 
                 if piece_type == PieceType::PAWN {
+                    // A pawn reaching the last rank must be encoded as a promotion
+                    let rank_8 = if us == Sides::WHITE { 7 } else { 0 };
+                    if rank_of(to) == rank_8 {
+                        return false;
+                    }
                     let up = pawn_push(us);
                     let forward = (from as isize + up) as usize;
                     let double = (from as isize + 2 * up) as usize;

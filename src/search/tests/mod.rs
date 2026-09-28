@@ -3,11 +3,15 @@ mod endgame;
 #[cfg(test)]
 mod evaluation;
 #[cfg(test)]
+mod move_picker;
+#[cfg(test)]
 mod opening;
 #[cfg(test)]
 mod perft;
 #[cfg(test)]
 mod pitfalls;
+#[cfg(test)]
+mod see;
 #[cfg(test)]
 mod tactics;
 

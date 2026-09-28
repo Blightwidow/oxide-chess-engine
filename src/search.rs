@@ -1080,7 +1080,7 @@ impl Search {
             // Check capture/promotion before do_move since board changes
             let to_sq = mv.to_sq();
             let move_type = mv.type_of();
-            let is_capture = self.position.board[to_sq] != PieceType::NONE || move_type == MoveTypes::EN_PASSANT;
+            let is_capture = move_picker::is_capture(mv, &self.position);
             let is_promotion = move_type == MoveTypes::PROMOTION;
             let is_quiet = !is_capture && !is_promotion;
             let piece_type = type_of_piece(self.position.board[mv.from_sq()]);
@@ -1469,7 +1469,7 @@ fn see(position: &Position, mv: Move) -> i16 {
         gain[depth] = SEE_VALUES[attacker_piece_type] - gain[depth - 1];
 
         // Pruning: if neither side can improve, stop early
-        if (-gain[depth]).max(gain[depth - 1]) < 0 {
+        if (-gain[depth - 1]).max(gain[depth]) < 0 {
             break;
         }
 
@@ -1529,7 +1529,7 @@ fn see(position: &Position, mv: Move) -> i16 {
     // Minimax walk-back: each side can choose to stop the exchange
     while depth > 1 {
         depth -= 1;
-        gain[depth - 1] = -((-gain[depth]).max(gain[depth - 1]));
+        gain[depth - 1] = -((-gain[depth - 1]).max(gain[depth]));
     }
 
     gain[0]

@@ -259,8 +259,8 @@ impl MovePicker {
             if self.killer_idx == 3 && (mv == self.killers[0] || mv == self.killers[1]) {
                 continue;
             }
-            // Skip if it was already yielded as a capture
-            if is_capture(mv, position) {
+            // Skip if it was already yielded in the capture stage (captures and all promotions)
+            if is_capture(mv, position) || mv.type_of() == MoveTypes::PROMOTION {
                 continue;
             }
             // Killers from sibling nodes / countermoves need full validation
@@ -422,10 +422,15 @@ fn obeys_check_mask(mv: Move, check_mask: Bitboard, position: &Position) -> bool
     }
 }
 
-/// Check if a move is a capture (including en passant).
+/// Check if a move is a capture (including en passant). Castling is encoded as
+/// king-takes-own-rook, so it is excluded explicitly.
 #[inline]
-fn is_capture(mv: Move, position: &Position) -> bool {
-    position.board[mv.to_sq()] != PieceType::NONE || mv.type_of() == MoveTypes::EN_PASSANT
+pub fn is_capture(mv: Move, position: &Position) -> bool {
+    match mv.type_of() {
+        MoveTypes::EN_PASSANT => true,
+        MoveTypes::CASTLING => false,
+        _ => position.board[mv.to_sq()] != PieceType::NONE,
+    }
 }
 
 /// Score a capture using MVV-LVA (matching the old score_move ordering).
